@@ -382,17 +382,17 @@ public class FrankieSharksScript extends Script {
 
         Microbot.log("Frankie has " + (currentSharkStock == -1 ? "N/A" : currentSharkStock) + " sharks.");
 
-        if (currentSharkStock == -1) {
-            Microbot.log("Raw sharks not found in shop or error reading stock. Closing shop and walking to bank for hop.");
+        if (currentSharkStock == -1 || currentSharkStock < MIN_SHARKS_TO_BUY) {
+            Microbot.log("Not enough sharks (< " + MIN_SHARKS_TO_BUY + "). Closing shop and hopping worlds directly.");
             Rs2Shop.closeShop();
-            currentState = State.WALKING_TO_BANK;
-            return;
-        }
-        
-        if (currentSharkStock < MIN_SHARKS_TO_BUY) {
-            Microbot.log("Not enough sharks (< " + MIN_SHARKS_TO_BUY + "). Closing shop and walking to bank for hop.");
-            Rs2Shop.closeShop();
-            currentState = State.WALKING_TO_BANK;
+            // Check if we have sharks in inventory that need banking before hopping
+            if (Rs2Inventory.hasItem(RAW_SHARK_ID)) {
+                Microbot.log("Have sharks in inventory, need to bank before hopping.");
+                currentState = State.WALKING_TO_BANK;
+            } else {
+                Microbot.log("No sharks in inventory, hopping worlds directly.");
+                currentState = State.HOPPING_WORLD;
+            }
             return;
         }
 
@@ -487,9 +487,18 @@ public class FrankieSharksScript extends Script {
 
     private void handleWalkingToBank() {
         Microbot.log("State: Walking to bank");
+        
+        // Check if we're already at the bank
+        if (Microbot.getClient().getLocalPlayer().getWorldLocation().distanceTo(PISCARILIUS_BANK_LOCATION) < 3) {
+            Microbot.log("Already at the bank, proceeding to banking state");
+            currentState = State.BANKING_SHARKS;
+            return;
+        }
+        
         Rs2Walker.walkTo(PISCARILIUS_BANK_LOCATION);
         sleepUntil(() -> Microbot.getClient().getLocalPlayer().getWorldLocation().distanceTo(PISCARILIUS_BANK_LOCATION) < 3, 10000);
-         if (Microbot.getClient().getLocalPlayer().getWorldLocation().distanceTo(PISCARILIUS_BANK_LOCATION) < 3) {
+        
+        if (Microbot.getClient().getLocalPlayer().getWorldLocation().distanceTo(PISCARILIUS_BANK_LOCATION) < 3) {
             currentState = State.BANKING_SHARKS;
         } else {
             Microbot.log("Failed to reach bank. Retrying walk.");
@@ -545,7 +554,19 @@ public class FrankieSharksScript extends Script {
             sleepUntil(Microbot::isLoggedIn, 15000);
              if(Microbot.isLoggedIn()){
                  Microbot.log("Successfully hopped worlds and logged in.");
-                 currentState = State.CHECK_INITIAL_CONDITIONS;
+                 // Check if we've previously interacted with Frankie in this session
+                 NPC frankie = Rs2Npc.getNpc(FRANKIE_NPC_ID_CUSTOM);
+                 if (frankie == null) {
+                     frankie = Rs2Npc.getNpc(FRANKIE_NPC_NAME);
+                 }
+                 
+                 // If we're already near Frankie, go directly to interact with him
+                 if (frankie != null && Microbot.getClient().getLocalPlayer().getWorldLocation().distanceTo(frankie.getWorldLocation()) <= 10) {
+                     Microbot.log("Already near Frankie after world hop, going directly to interaction");
+                     currentState = State.WALKING_TO_FRANKIE;
+                 } else {
+                     currentState = State.CHECK_INITIAL_CONDITIONS;
+                 }
              } else {
                  Microbot.log("Failed to log in after hopping. Stopping.");
                  currentState = State.STOPPED;
