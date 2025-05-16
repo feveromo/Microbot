@@ -33,6 +33,17 @@ public class FrankieSharksScript extends Script {
     private static final int MIN_SHARKS_TO_BUY = 10;
     private static final int MAX_BUY_QUANTITY = 27; // 28 inv slots - 1 for GP
     private static final int FRANKIE_SHOP_MAX_QUANTITY = 25; // Maximum sharks Frankie has in shop
+    
+    // Statistics tracking
+    private long startTime = 0;
+    private int totalSharksBought = 0;
+    
+    // Stamina potion constants
+    private static final List<Integer> STAMINA_POTION_IDS = Arrays.asList(
+        ItemID.STAMINA_POTION1, ItemID.STAMINA_POTION2, 
+        ItemID.STAMINA_POTION3, ItemID.STAMINA_POTION4
+    );
+    private static final int STAMINA_EFFECT_VARP = 25;
 
     private enum State {
         STARTING,
@@ -50,14 +61,51 @@ public class FrankieSharksScript extends Script {
     private State currentState = State.STARTING;
     private FrankieSharksConfig config;
     private ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
+    private boolean hasStaminaPotion = false;
 
     public String getCurrentState() {
         return currentState.toString();
+    }
+    
+    // Methods to get statistics for overlay
+    public int getTotalSharksBought() {
+        return totalSharksBought;
+    }
+    
+    public int getSharksPerHour() {
+        if (startTime == 0) {
+            return 0;
+        }
+        
+        long timeRunning = System.currentTimeMillis() - startTime;
+        // Avoid division by zero and ensure at least 1 minute has passed
+        if (timeRunning < 60000) {
+            return 0;
+        }
+        
+        // Calculate sharks per hour: (sharks bought / time running in hours)
+        // time in hours = time in ms / (1000 * 60 * 60)
+        return (int) ((double) totalSharksBought / ((double) timeRunning / 3600000));
+    }
+    
+    public String getRuntime() {
+        if (startTime == 0) {
+            return "00:00:00";
+        }
+        
+        long timeRunning = System.currentTimeMillis() - startTime;
+        long hours = timeRunning / (1000 * 60 * 60);
+        long minutes = (timeRunning % (1000 * 60 * 60)) / (1000 * 60);
+        long seconds = (timeRunning % (1000 * 60)) / 1000;
+        
+        return String.format("%02d:%02d:%02d", hours, minutes, seconds);
     }
 
     public boolean run(FrankieSharksConfig config) {
         this.config = config;
         Microbot.enableAutoRunOn = true;
+        startTime = System.currentTimeMillis();
+        totalSharksBought = 0;
         mainScheduledFuture = executorService.schedule(this::loop, 0, TimeUnit.MILLISECONDS);
         return true;
     }
@@ -83,6 +131,10 @@ public class FrankieSharksScript extends Script {
                 currentState = State.STOPPED;
                 break;
             }
+            
+            // Check if we need to use stamina potion
+            checkAndUseStaminaPotion();
+            
             switch (currentState) {
                 case CHECK_INITIAL_CONDITIONS:
                     handleCheckInitialConditions();
@@ -118,6 +170,35 @@ public class FrankieSharksScript extends Script {
              executorService.shutdownNow();
         }
     }
+    
+    /**
+     * Checks if we have stamina potion and uses it if stamina effect is not active
+     */
+    private void checkAndUseStaminaPotion() {
+        if (!config.useStaminaPotions() || !hasStaminaPotion) {
+            return;
+        }
+        
+        // Check if we already have stamina effect active
+        boolean staminaActive = Microbot.getClient().getVarpValue(STAMINA_EFFECT_VARP) > 0;
+        if (staminaActive) {
+            return;
+        }
+        
+        // Find stamina potion in inventory and use it
+        for (int potionId : STAMINA_POTION_IDS) {
+            if (Rs2Inventory.hasItem(potionId)) {
+                Microbot.log("Using stamina potion");
+                Rs2Inventory.interact(potionId, "Drink");
+                sleep(600, 800);
+                hasStaminaPotion = true;
+                return;
+            }
+        }
+        
+        // If we reached here, we don't have a stamina potion anymore
+        hasStaminaPotion = false;
+    }
 
     private void handleCheckInitialConditions() {
         Microbot.log("State: Checking initial conditions");
@@ -125,6 +206,44 @@ public class FrankieSharksScript extends Script {
             Microbot.showMessage("GP (Coins) not found in inventory. Stopping script.");
             currentState = State.STOPPED;
             return;
+        }
+        
+        // Check if we need to get a stamina potion at startup
+        if (config.useStaminaPotions() && !hasAnyStaminaPotion()) {
+            Microbot.log("Stamina potions enabled but none in inventory. Checking bank...");
+            // Go to bank if not there already
+            if (Microbot.getClient().getLocalPlayer().getWorldLocation().distanceTo(PISCARILIUS_BANK_LOCATION) > 5) {
+                Microbot.log("Not at bank, walking to bank to get stamina potion.");
+                Rs2Walker.walkTo(PISCARILIUS_BANK_LOCATION);
+                sleepUntil(() -> Microbot.getClient().getLocalPlayer().getWorldLocation().distanceTo(PISCARILIUS_BANK_LOCATION) <= 2, 5000);
+            }
+            
+            // Open bank to get stamina potion
+            if (!Rs2Bank.isOpen()) {
+                boolean opened = Rs2Bank.openBank();
+                if (opened) {
+                    sleepUntil(Rs2Bank::isOpen, 3000);
+                    if (Rs2Bank.isOpen()) {
+                        // Try to find and withdraw any stamina potion
+                        boolean foundStamina = false;
+                        for (int potionId : STAMINA_POTION_IDS) {
+                            if (Rs2Bank.hasItem(potionId)) {
+                                Rs2Bank.withdrawItem(potionId);
+                                Microbot.log("Withdrew stamina potion at startup");
+                                sleep(600, 800);
+                                hasStaminaPotion = true;
+                                foundStamina = true;
+                                break;
+                            }
+                        }
+                        if (!foundStamina) {
+                            Microbot.log("No stamina potions found in bank");
+                        }
+                        Rs2Bank.closeBank();
+                        sleep(300, 500);
+                    }
+                }
+            }
         }
         
         // Check if we're already near Frankie
@@ -136,7 +255,12 @@ public class FrankieSharksScript extends Script {
         // If we're already at Frankie and have enough inventory space, go straight to interaction
         if (frankie != null && Microbot.getClient().getLocalPlayer().getWorldLocation().distanceTo(frankie.getWorldLocation()) <= 5) {
             Microbot.log("Already at Frankie's location, checking inventory space...");
-            if (Rs2Inventory.getEmptySlots() >= MIN_SHARKS_TO_BUY) {
+            int requiredSpace = MIN_SHARKS_TO_BUY;
+            if (config.useStaminaPotions() && !hasAnyStaminaPotion()) {
+                requiredSpace += 1; // Reserve one more slot for stamina potion
+            }
+            
+            if (Rs2Inventory.getEmptySlots() >= requiredSpace) {
                 Microbot.log("We have enough space (" + Rs2Inventory.getEmptySlots() + "), proceeding directly to interaction");
                 currentState = State.INTERACTING_WITH_FRANKIE;
                 return;
@@ -153,7 +277,10 @@ public class FrankieSharksScript extends Script {
             sleepUntil(() -> Microbot.getClient().getLocalPlayer().getWorldLocation().distanceTo(PISCARILIUS_BANK_LOCATION) <= 2, 5000);
         }
 
-        if (Rs2Inventory.getEmptySlots() < MAX_BUY_QUANTITY) {
+        // Calculate max buy quantity based on stamina potion settings
+        final int maxBuyQuantity = config.useStaminaPotions() ? MAX_BUY_QUANTITY - 1 : MAX_BUY_QUANTITY;
+        
+        if (Rs2Inventory.getEmptySlots() < maxBuyQuantity) {
             Microbot.log("Not enough inventory space ("+ Rs2Inventory.getEmptySlots() +"). Banking items...");
             if (!Rs2Bank.isOpen()) {
                 boolean opened = Rs2Bank.openBank();
@@ -166,18 +293,62 @@ public class FrankieSharksScript extends Script {
                 }
             }
             if (Rs2Bank.isOpen()) {
-                 Rs2Bank.depositAllExcept(GP_ID);
-                 sleepUntil(() -> Rs2Inventory.getEmptySlots() >= MAX_BUY_QUANTITY, 2000);
+                 // Check for and withdraw stamina potion if enabled
+                 if (config.useStaminaPotions() && !hasAnyStaminaPotion()) {
+                     // Try to find and withdraw any stamina potion
+                     boolean foundStamina = false;
+                     for (int potionId : STAMINA_POTION_IDS) {
+                         if (Rs2Bank.hasItem(potionId)) {
+                             Rs2Bank.withdrawItem(potionId);
+                             Microbot.log("Withdrew stamina potion");
+                             sleep(600, 800);
+                             hasStaminaPotion = true;
+                             foundStamina = true;
+                             break;
+                         }
+                     }
+                     if (!foundStamina) {
+                         Microbot.log("No stamina potions found in bank");
+                     }
+                 }
+                 
+                 // Deposit all except coins and stamina potion
+                 if (config.useStaminaPotions() && hasAnyStaminaPotion()) {
+                     Integer[] keepItems = new Integer[]{GP_ID};
+                     for (int potionId : STAMINA_POTION_IDS) {
+                         if (Rs2Inventory.hasItem(potionId)) {
+                             keepItems = new Integer[]{GP_ID, potionId};
+                             break;
+                         }
+                     }
+                     Rs2Bank.depositAllExcept(keepItems);
+                 } else {
+                     Rs2Bank.depositAllExcept(GP_ID);
+                 }
+                 
+                 sleepUntil(() -> Rs2Inventory.getEmptySlots() >= maxBuyQuantity, 2000);
                  Rs2Bank.closeBank();
                  sleep(200,300);
             }
-            if (Rs2Inventory.getEmptySlots() < MAX_BUY_QUANTITY) {
+            if (Rs2Inventory.getEmptySlots() < maxBuyQuantity - (hasAnyStaminaPotion() ? 1 : 0)) {
                  Microbot.showMessage("Failed to free up inventory space ("+ Rs2Inventory.getEmptySlots() +"). Stopping script.");
                  currentState = State.STOPPED;
                  return;
             }
         }
         currentState = State.WALKING_TO_FRANKIE_AREA;
+    }
+    
+    /**
+     * Checks if player has any stamina potion in inventory
+     */
+    private boolean hasAnyStaminaPotion() {
+        for (int potionId : STAMINA_POTION_IDS) {
+            if (Rs2Inventory.hasItem(potionId)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void handleWalkingToFrankieArea() {
@@ -383,8 +554,22 @@ public class FrankieSharksScript extends Script {
         Microbot.log("Frankie has " + (currentSharkStock == -1 ? "N/A" : currentSharkStock) + " sharks.");
 
         if (currentSharkStock == -1 || currentSharkStock < MIN_SHARKS_TO_BUY) {
-            Microbot.log("Not enough sharks (< " + MIN_SHARKS_TO_BUY + "). Closing shop and hopping worlds directly.");
+            Microbot.log("Not enough sharks (< " + MIN_SHARKS_TO_BUY + "). Adding delay before closing shop.");
+            // Add delay before closing shop when out of stock to prevent looping too quickly
+            sleep(1500, 2500);
+            
             Rs2Shop.closeShop();
+            
+            // Add slightly longer delay after closing shop to ensure it's fully closed
+            sleep(1200, 1800);
+            
+            // Additional verification that shop is actually closed
+            if (Rs2Shop.isOpen()) {
+                Microbot.log("Shop is still open! Attempting to close again...");
+                Rs2Shop.closeShop();
+                sleep(1000, 1500);
+            }
+            
             // Check if we have sharks in inventory that need banking before hopping
             if (Rs2Inventory.hasItem(RAW_SHARK_ID)) {
                 Microbot.log("Have sharks in inventory, need to bank before hopping.");
@@ -397,8 +582,13 @@ public class FrankieSharksScript extends Script {
         }
 
         int freeSlots = Rs2Inventory.getEmptySlots();
+        // Calculate max purchase quantity
+        final int maxPurchaseQuantity = config.useStaminaPotions() && hasAnyStaminaPotion() 
+                ? MAX_BUY_QUANTITY - 1 
+                : MAX_BUY_QUANTITY;
+        
         int numToBuy = Math.min(currentSharkStock, freeSlots);
-        numToBuy = Math.min(numToBuy, MAX_BUY_QUANTITY);
+        numToBuy = Math.min(numToBuy, maxPurchaseQuantity);
         final int finalNumToBuy = numToBuy;
 
         if (finalNumToBuy > 0) {
@@ -453,13 +643,16 @@ public class FrankieSharksScript extends Script {
                 
                 boolean purchaseVerified = sleepUntil(() -> Rs2Inventory.count(RAW_SHARK_ID) >= sharksInInventoryBeforeBuy + MIN_SHARKS_TO_BUY, 5000 + (currentSharkStock * 300));
                 
+                int sharksBoughtThisTrip = Rs2Inventory.count(RAW_SHARK_ID) - sharksInInventoryBeforeBuy;
+                totalSharksBought += sharksBoughtThisTrip;
+                
                 if (purchaseVerified) {
                     Microbot.log("Successfully purchased sharks. New count: " + Rs2Inventory.count(RAW_SHARK_ID) + 
-                        " (+" + (Rs2Inventory.count(RAW_SHARK_ID) - sharksInInventoryBeforeBuy) + ")");
+                        " (+" + sharksBoughtThisTrip + ")");
                 } else {
                     Microbot.log("Purchase of sharks might have failed or partially completed. Expected more than: " + 
                         (sharksInInventoryBeforeBuy + MIN_SHARKS_TO_BUY) + ", Got: " + Rs2Inventory.count(RAW_SHARK_ID) +
-                        " (+" + (Rs2Inventory.count(RAW_SHARK_ID) - sharksInInventoryBeforeBuy) + ")");
+                        " (+" + sharksBoughtThisTrip + ")");
                 }
             } else {
                 Microbot.log("Attempting to buy " + finalNumToBuy + " " + sharkName + " using optimal buy.");
@@ -469,6 +662,9 @@ public class FrankieSharksScript extends Script {
                 sleep(500, 1000);
                 
                 boolean purchaseVerified = sleepUntil(() -> Rs2Inventory.count(RAW_SHARK_ID) >= sharksInInventoryBeforeBuy + finalNumToBuy, 5000 + (finalNumToBuy * 300));
+                
+                int sharksBoughtThisTrip = Rs2Inventory.count(RAW_SHARK_ID) - sharksInInventoryBeforeBuy;
+                totalSharksBought += sharksBoughtThisTrip;
                 
                 if (purchaseVerified) {
                     Microbot.log("Successfully purchased sharks. New count: " + Rs2Inventory.count(RAW_SHARK_ID));
@@ -518,8 +714,41 @@ public class FrankieSharksScript extends Script {
         }
 
         if (Rs2Bank.isOpen()) {
+            // Handle stamina potion checking if enabled
+            if (config.useStaminaPotions() && !hasAnyStaminaPotion()) {
+                // Try to find and withdraw any stamina potion
+                for (int potionId : STAMINA_POTION_IDS) {
+                    if (Rs2Bank.hasItem(potionId)) {
+                        Rs2Bank.withdrawItem(potionId);
+                        Microbot.log("Withdrew stamina potion");
+                        sleep(600, 800);
+                        hasStaminaPotion = true;
+                        break;
+                    }
+                }
+            }
+            
+            // Bank sharks but keep stamina potion if needed
             if (Rs2Inventory.hasItem(RAW_SHARK_ID)) {
-                Rs2Bank.depositAll(RAW_SHARK_ID);
+                if (config.useStaminaPotions() && hasAnyStaminaPotion()) {
+                    // Keep stamina potion if we have one
+                    Integer staminaPotionId = null;
+                    for (int potionId : STAMINA_POTION_IDS) {
+                        if (Rs2Inventory.hasItem(potionId)) {
+                            staminaPotionId = potionId;
+                            break;
+                        }
+                    }
+                    
+                    if (staminaPotionId != null) {
+                        Integer[] keepItems = {GP_ID, staminaPotionId};
+                        Rs2Bank.depositAllExcept(keepItems);
+                    } else {
+                        Rs2Bank.depositAllExcept(GP_ID);
+                    }
+                } else {
+                    Rs2Bank.depositAll(RAW_SHARK_ID);
+                }
                 sleepUntil(() -> !Rs2Inventory.hasItem(RAW_SHARK_ID), 3000);
             } else {
                 Microbot.log("No sharks in inventory to bank.");
@@ -554,6 +783,7 @@ public class FrankieSharksScript extends Script {
             sleepUntil(Microbot::isLoggedIn, 15000);
              if(Microbot.isLoggedIn()){
                  Microbot.log("Successfully hopped worlds and logged in.");
+                 
                  // Check if we've previously interacted with Frankie in this session
                  NPC frankie = Rs2Npc.getNpc(FRANKIE_NPC_ID_CUSTOM);
                  if (frankie == null) {

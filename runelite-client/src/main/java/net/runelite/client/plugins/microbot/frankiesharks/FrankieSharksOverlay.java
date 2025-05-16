@@ -24,6 +24,10 @@ public class FrankieSharksOverlay extends OverlayPanel {
     private static final String FRANKIE_NPC_NAME = "Frankie";
     private static final WorldPoint FRANKIE_LOCATION = new WorldPoint(1829, 3718, 0);
     private static final int RAW_SHARK_ID = ItemID.RAW_SHARK;
+    private static final int STAMINA_EFFECT_VARP = 25;
+    
+    @Inject
+    private FrankieSharksConfig config;
 
     @Inject
     FrankieSharksOverlay(FrankieSharksPlugin plugin) {
@@ -41,7 +45,7 @@ public class FrankieSharksOverlay extends OverlayPanel {
         try {
             panelComponent.setPreferredSize(new Dimension(220, 300));
             panelComponent.getChildren().add(TitleComponent.builder()
-                    .text("Frankie Sharks v1.0.3")
+                    .text("Frankie Sharks v1.0.4")
                     .color(Color.GREEN)
                     .build());
 
@@ -59,12 +63,24 @@ public class FrankieSharksOverlay extends OverlayPanel {
                     .right(script.getCurrentState())
                     .build());
                     
-            // Add distance to Frankie's location
-            int distanceToFrankieLocation = Microbot.getClient().getLocalPlayer().getWorldLocation().distanceTo(FRANKIE_LOCATION);
+            // Add runtime display
             panelComponent.getChildren().add(LineComponent.builder()
-                    .left("Distance to Area:")
-                    .right(String.valueOf(distanceToFrankieLocation))
-                    .rightColor(distanceToFrankieLocation <= 10 ? Color.GREEN : (distanceToFrankieLocation <= 20 ? Color.YELLOW : Color.RED))
+                    .left("Runtime:")
+                    .right(script.getRuntime())
+                    .rightColor(Color.WHITE)
+                    .build());
+                    
+            // Add statistics for sharks bought and sharks per hour
+            panelComponent.getChildren().add(LineComponent.builder()
+                    .left("Sharks Bought:")
+                    .right(String.valueOf(script.getTotalSharksBought()))
+                    .rightColor(Color.GREEN)
+                    .build());
+                    
+            panelComponent.getChildren().add(LineComponent.builder()
+                    .left("Sharks Per Hour:")
+                    .right(String.valueOf(script.getSharksPerHour()))
+                    .rightColor(Color.CYAN)
                     .build());
                     
             // Check if Frankie is found (helpful for debugging)
@@ -78,31 +94,6 @@ public class FrankieSharksOverlay extends OverlayPanel {
                     .right(frankie != null ? "Yes (ID: " + (frankie != null ? frankie.getId() : "N/A") + ")" : "No")
                     .rightColor(frankie != null ? Color.GREEN : Color.RED)
                     .build());
-                    
-            if (frankie != null) {
-                int distance = Microbot.getClient().getLocalPlayer().getWorldLocation().distanceTo(frankie.getWorldLocation());
-                panelComponent.getChildren().add(LineComponent.builder()
-                        .left("Distance to Frankie:")
-                        .right(String.valueOf(distance))
-                        .rightColor(distance < 3 ? Color.GREEN : (distance < 10 ? Color.YELLOW : Color.RED))
-                        .build());
-            }
-            
-            // Count sharks in inventory
-            int sharksInInventory = Rs2Inventory.count(RAW_SHARK_ID);
-            panelComponent.getChildren().add(LineComponent.builder()
-                    .left("Inventory Sharks:")
-                    .right(String.valueOf(sharksInInventory))
-                    .rightColor(sharksInInventory > 0 ? Color.GREEN : Color.WHITE)
-                    .build());
-                    
-            // Inventory space available
-            panelComponent.getChildren().add(LineComponent.builder()
-                    .left("Free Slots:")
-                    .right(String.valueOf(Rs2Inventory.getEmptySlots()))
-                    .rightColor(Rs2Inventory.getEmptySlots() >= 10 ? Color.GREEN : 
-                               (Rs2Inventory.getEmptySlots() > 0 ? Color.YELLOW : Color.RED))
-                    .build());
 
             // If bank is open, simplify to just show bank status
             if (Rs2Bank.isOpen()) {
@@ -112,10 +103,40 @@ public class FrankieSharksOverlay extends OverlayPanel {
                         .rightColor(Color.CYAN)
                         .build());
             }
+            
+            // Add stamina potion status
+            if (config.useStaminaPotions()) {
+                boolean staminaActive = Microbot.getClient().getVarpValue(STAMINA_EFFECT_VARP) > 0;
+                panelComponent.getChildren().add(LineComponent.builder()
+                        .left("Stamina:")
+                        .right(staminaActive ? "Active" : "Inactive")
+                        .rightColor(staminaActive ? Color.GREEN : Color.RED)
+                        .build());
+                
+                // Check for stamina potions in inventory
+                boolean hasStaminaInv = hasAnyStaminaPotion();
+                if (hasStaminaInv) {
+                    panelComponent.getChildren().add(LineComponent.builder()
+                            .left("Potion:")
+                            .right("In inventory")
+                            .rightColor(Color.GREEN)
+                            .build());
+                }
+            }
 
         } catch (Exception ex) {
             System.out.println(ex.getMessage());
         }
         return super.render(graphics);
+    }
+    
+    /**
+     * Checks if player has any stamina potion in inventory
+     */
+    private boolean hasAnyStaminaPotion() {
+        return Rs2Inventory.hasItem(ItemID.STAMINA_POTION1) ||
+               Rs2Inventory.hasItem(ItemID.STAMINA_POTION2) ||
+               Rs2Inventory.hasItem(ItemID.STAMINA_POTION3) ||
+               Rs2Inventory.hasItem(ItemID.STAMINA_POTION4);
     }
 } 
