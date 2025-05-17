@@ -13,6 +13,7 @@ import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
+import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
 import net.runelite.client.plugins.microbot.util.npc.Rs2Npc;
@@ -27,12 +28,15 @@ public class FrankieSharksScript extends Script {
     private static final int RAW_SHARK_ID = ItemID.RAW_SHARK;
     private static final int GP_ID = ItemID.COINS_995;
     private static final WorldPoint PISCARILIUS_BANK_LOCATION = new WorldPoint(1803, 3787, 0);
+    private static final WorldPoint PISCARILIUS_BANK_LOCATION_ALT1 = new WorldPoint(1802, 3786, 0);
+    private static final WorldPoint PISCARILIUS_BANK_LOCATION_ALT2 = new WorldPoint(1805, 3788, 0);
     private static final WorldPoint FRANKIE_LOCATION = new WorldPoint(1829, 3718, 0); // Frankie's approximate location
     private static final List<Integer> BANK_BOOTH_IDS = Arrays.asList(27718, 27719, 27720, 27721);
     private static final List<Integer> BANKER_NPC_IDS = Arrays.asList(6969, 6970);
-    private static final int MIN_SHARKS_TO_BUY = 10;
+    private static final int MIN_SHARKS_TO_BUY = 8;
     private static final int MAX_BUY_QUANTITY = 27; // 28 inv slots - 1 for GP
     private static final int FRANKIE_SHOP_MAX_QUANTITY = 25; // Maximum sharks Frankie has in shop
+    private static final int TARGET_SHARK_INVENTORY = 25; // Goal amount of sharks to have before banking
     
     // Statistics tracking
     private long startTime = 0;
@@ -62,6 +66,8 @@ public class FrankieSharksScript extends Script {
     private FrankieSharksConfig config;
     private ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
     private boolean hasStaminaPotion = false;
+    private int walkToBankAttempts = 0;
+    private static final int MAX_WALK_TO_BANK_ATTEMPTS = 5;
 
     public String getCurrentState() {
         return currentState.toString();
@@ -570,11 +576,25 @@ public class FrankieSharksScript extends Script {
                 sleep(1000, 1500);
             }
             
-            // Check if we have sharks in inventory that need banking before hopping
-            if (Rs2Inventory.hasItem(RAW_SHARK_ID)) {
+            // Check if we have enough sharks to bank, or should continue buying
+            int currentSharkCount = Rs2Inventory.count(RAW_SHARK_ID);
+            int freeSlots = Rs2Inventory.getEmptySlots();
+            
+            // If we have sharks but less than target and enough space to continue buying
+            if (Rs2Inventory.hasItem(RAW_SHARK_ID) && 
+                currentSharkCount < TARGET_SHARK_INVENTORY && 
+                freeSlots >= MIN_SHARKS_TO_BUY) {
+                Microbot.log("Have " + currentSharkCount + " sharks, which is less than our target of " + TARGET_SHARK_INVENTORY);
+                Microbot.log("Still have " + freeSlots + " inventory spaces, continuing to hop worlds");
+                currentState = State.HOPPING_WORLD;
+            } 
+            // Otherwise if we have sharks and either reached our target or don't have space, bank them
+            else if (Rs2Inventory.hasItem(RAW_SHARK_ID)) {
                 Microbot.log("Have sharks in inventory, need to bank before hopping.");
                 currentState = State.WALKING_TO_BANK;
-            } else {
+            } 
+            // If we have no sharks at all, just hop worlds
+            else {
                 Microbot.log("No sharks in inventory, hopping worlds directly.");
                 currentState = State.HOPPING_WORLD;
             }
@@ -601,118 +621,197 @@ public class FrankieSharksScript extends Script {
             }
             String sharkName = sharkComposition.getName();
             
-            // Check if we should buy all (50 is enough to buy all of Frankie's stock)
-            if (finalNumToBuy >= MIN_SHARKS_TO_BUY && currentSharkStock <= FRANKIE_SHOP_MAX_QUANTITY) {
-                Microbot.log("Attempting to buy all " + currentSharkStock + " " + sharkName + ".");
-                int sharksInInventoryBeforeBuy = Rs2Inventory.count(RAW_SHARK_ID);
-                
-                // Try to buy in multiple batches to get all sharks
-                try {
-                    // Buy using multiple calls to get all sharks
-                    Microbot.log("Buying sharks in multiple batches");
-                    
-                    // Buy in batches of 10 and 5
-                    if (currentSharkStock >= 10) {
-                        Rs2Shop.buyItemOptimally(sharkName, 10);
-                        sleep(500, 800);
-                    }
-                    
-                    if (currentSharkStock >= 15) {
-                        Rs2Shop.buyItemOptimally(sharkName, 10);
-                        sleep(500, 800);
-                    }
-                    
-                    if (currentSharkStock >= 20) {
-                        Rs2Shop.buyItemOptimally(sharkName, 5);
-                        sleep(500, 800);
-                    }
-                    
-                    // Buy any remaining sharks
-                    int remainingToBuy = Math.min(freeSlots - (Rs2Inventory.count(RAW_SHARK_ID) - sharksInInventoryBeforeBuy), 
-                                               currentSharkStock - Math.min(currentSharkStock, 20));
-                    if (remainingToBuy > 0) {
-                        Rs2Shop.buyItemOptimally(sharkName, remainingToBuy);
-                    }
-                } catch (Exception e) {
-                    Microbot.log("Exception while buying sharks: " + e.getMessage());
-                    // Fallback to standard buying
-                    Rs2Shop.buyItemOptimally(sharkName, finalNumToBuy);
-                }
-                
-                sleep(500, 1000); 
-                
-                boolean purchaseVerified = sleepUntil(() -> Rs2Inventory.count(RAW_SHARK_ID) >= sharksInInventoryBeforeBuy + MIN_SHARKS_TO_BUY, 5000 + (currentSharkStock * 300));
-                
-                int sharksBoughtThisTrip = Rs2Inventory.count(RAW_SHARK_ID) - sharksInInventoryBeforeBuy;
-                totalSharksBought += sharksBoughtThisTrip;
-                
-                if (purchaseVerified) {
-                    Microbot.log("Successfully purchased sharks. New count: " + Rs2Inventory.count(RAW_SHARK_ID) + 
-                        " (+" + sharksBoughtThisTrip + ")");
-                } else {
-                    Microbot.log("Purchase of sharks might have failed or partially completed. Expected more than: " + 
-                        (sharksInInventoryBeforeBuy + MIN_SHARKS_TO_BUY) + ", Got: " + Rs2Inventory.count(RAW_SHARK_ID) +
-                        " (+" + sharksBoughtThisTrip + ")");
-                }
-            } else {
-                Microbot.log("Attempting to buy " + finalNumToBuy + " " + sharkName + " using optimal buy.");
-                int sharksInInventoryBeforeBuy = Rs2Inventory.count(RAW_SHARK_ID);
-                Rs2Shop.buyItemOptimally(sharkName, finalNumToBuy);
-                
+            // Always use buy-50 option instead of batches since it will buy all available sharks
+            Microbot.log("Using buy-50 option to purchase all available sharks from Frankie");
+            int sharksInInventoryBeforeBuy = Rs2Inventory.count(RAW_SHARK_ID);
+            
+            // Use buy-50 option which will buy all sharks up to inventory limit
+            try {
+                Rs2Shop.buyItem(sharkName, "50");
                 sleep(500, 1000);
-                
-                boolean purchaseVerified = sleepUntil(() -> Rs2Inventory.count(RAW_SHARK_ID) >= sharksInInventoryBeforeBuy + finalNumToBuy, 5000 + (finalNumToBuy * 300));
-                
-                int sharksBoughtThisTrip = Rs2Inventory.count(RAW_SHARK_ID) - sharksInInventoryBeforeBuy;
-                totalSharksBought += sharksBoughtThisTrip;
-                
-                if (purchaseVerified) {
-                    Microbot.log("Successfully purchased sharks. New count: " + Rs2Inventory.count(RAW_SHARK_ID));
-                } else {
-                    Microbot.log("Purchase of sharks might have failed or partially completed. Expected at least: " + 
-                        (sharksInInventoryBeforeBuy + finalNumToBuy) + ", Got: " + Rs2Inventory.count(RAW_SHARK_ID));
-                }
+            } catch (Exception e) {
+                Microbot.log("Exception while buying sharks: " + e.getMessage());
+                // Fallback to standard buying if buy-50 fails
+                Rs2Shop.buyItem(sharkName, String.valueOf(finalNumToBuy));
+            }
+            
+            boolean purchaseVerified = sleepUntil(() -> Rs2Inventory.count(RAW_SHARK_ID) > sharksInInventoryBeforeBuy, 5000);
+            
+            int sharksBoughtThisTrip = Rs2Inventory.count(RAW_SHARK_ID) - sharksInInventoryBeforeBuy;
+            totalSharksBought += sharksBoughtThisTrip;
+            
+            if (purchaseVerified) {
+                Microbot.log("Successfully purchased " + sharksBoughtThisTrip + " sharks. New count: " + Rs2Inventory.count(RAW_SHARK_ID));
+            } else {
+                Microbot.log("Purchase of sharks might have failed. Expected more than: " + 
+                    sharksInInventoryBeforeBuy + ", Got: " + Rs2Inventory.count(RAW_SHARK_ID));
             }
         } else {
             Microbot.log("No space or no sharks to buy that meet criteria (numToBuy: " + finalNumToBuy + ", stock: " + currentSharkStock + ", freeSlots: " + freeSlots + ").");
         }
 
         Rs2Shop.closeShop();
-        currentState = State.WALKING_TO_BANK;
+        
+        // Check if we should continue hopping to buy more sharks
+        int currentSharkCount = Rs2Inventory.count(RAW_SHARK_ID);
+        // Update free slots count after buying
+        freeSlots = Rs2Inventory.getEmptySlots();
+        
+        // If we have less than target amount of sharks and enough space for minimum buy threshold
+        if (currentSharkCount < TARGET_SHARK_INVENTORY && freeSlots >= MIN_SHARKS_TO_BUY) {
+            Microbot.log("We have " + currentSharkCount + " sharks, which is less than our target of " + TARGET_SHARK_INVENTORY);
+            Microbot.log("We have " + freeSlots + " free slots, which is enough for at least " + MIN_SHARKS_TO_BUY + " more sharks");
+            Microbot.log("Hopping worlds to continue buying sharks");
+            currentState = State.HOPPING_WORLD;
+        } else {
+            Microbot.log("Going to bank: We have " + currentSharkCount + " sharks with " + freeSlots + " free slots remaining");
+            currentState = State.WALKING_TO_BANK;
+        }
+    }
+
+    /**
+     * Check if we're in the bank area by looking for bank booths or bankers
+     */
+    private boolean isAtBankArea() {
+        // Check distance to known bank locations
+        WorldPoint playerLocation = Microbot.getClient().getLocalPlayer().getWorldLocation();
+        if (playerLocation.distanceTo(PISCARILIUS_BANK_LOCATION) <= 7 ||
+            playerLocation.distanceTo(PISCARILIUS_BANK_LOCATION_ALT1) <= 7 ||
+            playerLocation.distanceTo(PISCARILIUS_BANK_LOCATION_ALT2) <= 7) {
+            return true;
+        }
+        
+        // Look for bank booths
+        for (int boothId : BANK_BOOTH_IDS) {
+            if (Rs2GameObject.findObjectById(boothId) != null) {
+                return true;
+            }
+        }
+        
+        // Look for bankers
+        for (int bankerId : BANKER_NPC_IDS) {
+            if (Rs2Npc.getNpc(bankerId) != null) {
+                return true;
+            }
+        }
+        
+        return false;
     }
 
     private void handleWalkingToBank() {
         Microbot.log("State: Walking to bank");
         
         // Check if we're already at the bank
-        if (Microbot.getClient().getLocalPlayer().getWorldLocation().distanceTo(PISCARILIUS_BANK_LOCATION) < 3) {
-            Microbot.log("Already at the bank, proceeding to banking state");
+        if (isAtBankArea()) {
+            Microbot.log("Already at the bank area, proceeding to banking state");
+            walkToBankAttempts = 0; // Reset counter
             currentState = State.BANKING_SHARKS;
             return;
         }
         
-        Rs2Walker.walkTo(PISCARILIUS_BANK_LOCATION);
-        sleepUntil(() -> Microbot.getClient().getLocalPlayer().getWorldLocation().distanceTo(PISCARILIUS_BANK_LOCATION) < 3, 10000);
+        // Add retry counter to prevent getting stuck
+        if (walkToBankAttempts >= MAX_WALK_TO_BANK_ATTEMPTS) {
+            Microbot.log("Exceeded maximum attempts to walk to bank (" + MAX_WALK_TO_BANK_ATTEMPTS + "). Force moving to banking state.");
+            currentState = State.BANKING_SHARKS;
+            return;
+        }
         
-        if (Microbot.getClient().getLocalPlayer().getWorldLocation().distanceTo(PISCARILIUS_BANK_LOCATION) < 3) {
+        walkToBankAttempts++;
+        Microbot.log("Walking to bank attempt " + walkToBankAttempts + "/" + MAX_WALK_TO_BANK_ATTEMPTS);
+        
+        // Get current position and distance to bank
+        WorldPoint currentPosition = Microbot.getClient().getLocalPlayer().getWorldLocation();
+        int distanceToBank = currentPosition.distanceTo(PISCARILIUS_BANK_LOCATION);
+        Microbot.log("Current distance to bank: " + distanceToBank + " tiles");
+        
+        // Use the direct emergency teleport-like approach that works well
+        Microbot.log("Using direct walk approach to bank");
+        Rs2Walker.walkTo(PISCARILIUS_BANK_LOCATION);
+        
+        // Use longer timeout for reliability
+        boolean reached = sleepUntil(() -> 
+            isAtBankArea() || Microbot.getClient().getLocalPlayer().getWorldLocation().distanceTo(PISCARILIUS_BANK_LOCATION) < 5, 
+            15000);
+        
+        if (reached) {
+            Microbot.log("Successfully reached bank");
+            walkToBankAttempts = 0; // Reset counter
             currentState = State.BANKING_SHARKS;
         } else {
-            Microbot.log("Failed to reach bank. Retrying walk.");
+            Microbot.log("Failed to reach bank. Current position: " + 
+                Microbot.getClient().getLocalPlayer().getWorldLocation().getX() + ", " + 
+                Microbot.getClient().getLocalPlayer().getWorldLocation().getY());
+            
+            // If we're not making progress, try alternative bank locations
+            if (walkToBankAttempts > 1) {
+                WorldPoint targetLocation;
+                if (walkToBankAttempts % 2 == 0) {
+                    targetLocation = PISCARILIUS_BANK_LOCATION_ALT1;
+                    Microbot.log("Trying alternative bank location 1");
+                } else {
+                    targetLocation = PISCARILIUS_BANK_LOCATION_ALT2;
+                    Microbot.log("Trying alternative bank location 2");
+                }
+                
+                Rs2Walker.walkTo(targetLocation);
+                sleepUntil(() -> 
+                    isAtBankArea() || Microbot.getClient().getLocalPlayer().getWorldLocation().distanceTo(targetLocation) < 5, 
+                    15000);
+            }
         }
     }
 
     private void handleBankingSharks() {
         Microbot.log("State: Banking sharks");
-        if (!Rs2Bank.isOpen()) {
-            boolean bankOpened = Rs2Bank.openBank();
-            if (bankOpened) {
-                sleepUntil(Rs2Bank::isOpen, 5000);
-            } else {
-                Microbot.log("Failed to open bank. Retrying.");
-                return; 
+        
+        // Make sure we're at the bank
+        if (!isAtBankArea()) {
+            Microbot.log("Not at bank area. Walking to bank location");
+            Rs2Walker.walkTo(PISCARILIUS_BANK_LOCATION);
+            boolean reached = sleepUntil(() -> isAtBankArea(), 10000);
+            
+            if (!reached) {
+                // If we're still not at the bank after waiting, force move to the next state
+                Microbot.log("Could not reach bank. Moving to world hop state anyway.");
+                currentState = State.HOPPING_WORLD;
+                return;
+            }
+        }
+        
+        // Try to open the bank (max 3 attempts)
+        boolean bankOpened = false;
+        for (int attempt = 0; attempt < 3 && !Rs2Bank.isOpen(); attempt++) {
+            Microbot.log("Opening bank attempt " + (attempt + 1));
+            
+            // Try direct NPC banking first if we can find a banker
+            for (int bankerId : BANKER_NPC_IDS) {
+                NPC banker = Rs2Npc.getNpc(bankerId);
+                if (banker != null) {
+                    Microbot.log("Found banker NPC (ID: " + bankerId + "), interacting");
+                    Rs2Npc.interact(banker, "Bank");
+                    if (sleepUntil(Rs2Bank::isOpen, 3000)) {
+                        bankOpened = true;
+                        break;
+                    }
+                }
+            }
+            
+            // If that didn't work, try regular bank opening
+            if (!bankOpened) {
+                Rs2Bank.openBank();
+                if (sleepUntil(Rs2Bank::isOpen, 3000)) {
+                    bankOpened = true;
+                    break;
+                }
+            }
+            
+            // Wait before retrying
+            if (!bankOpened) {
+                sleep(800, 1200);
             }
         }
 
+        // If bank is open, deposit sharks and potentially withdraw stamina
         if (Rs2Bank.isOpen()) {
             // Handle stamina potion checking if enabled
             if (config.useStaminaPotions() && !hasAnyStaminaPotion()) {
@@ -742,67 +841,82 @@ public class FrankieSharksScript extends Script {
                     
                     if (staminaPotionId != null) {
                         Integer[] keepItems = {GP_ID, staminaPotionId};
+                        Microbot.log("Depositing all except coins and stamina potion");
                         Rs2Bank.depositAllExcept(keepItems);
                     } else {
+                        Microbot.log("Depositing all except coins");
                         Rs2Bank.depositAllExcept(GP_ID);
                     }
                 } else {
+                    Microbot.log("Depositing sharks");
                     Rs2Bank.depositAll(RAW_SHARK_ID);
                 }
-                sleepUntil(() -> !Rs2Inventory.hasItem(RAW_SHARK_ID), 3000);
+                boolean deposited = sleepUntil(() -> !Rs2Inventory.hasItem(RAW_SHARK_ID), 3000);
+                Microbot.log("Sharks deposited: " + deposited);
             } else {
                 Microbot.log("No sharks in inventory to bank.");
             }
+            
             Rs2Bank.closeBank();
-            Microbot.log("Sharks banked (or no sharks to bank).");
-            currentState = State.HOPPING_WORLD;
+            sleepUntil(() -> !Rs2Bank.isOpen(), 3000);
         } else {
-             Microbot.log("Bank is not open after attempting to open. Retrying.");
+            Microbot.log("Could not open bank after multiple attempts");
         }
+        
+        // Always move to the hopping state to ensure we're hopping between world visits
+        currentState = State.HOPPING_WORLD;
     }
 
     private void handleHoppingWorld() {
         Microbot.log("State: Hopping world");
 
         int nextWorld = Login.getNextWorld(true, null);
-        boolean hopInitiated = false;
-
-        if (nextWorld != -1 && nextWorld != Microbot.getClient().getWorld()) {
-            Microbot.hopToWorld(nextWorld);
-            hopInitiated = true;
-        } else if (nextWorld == -1) {
-            Microbot.log("Could not find a suitable P2P world to hop to (getNextWorld returned -1).");
-        } else {
-            Microbot.log("Already on the world that would be hopped to, or no other P2P world found. Retrying logic or stopping if stuck.");
-        }
         
-        if(hopInitiated) {
-            Microbot.log("World hop initiated to world " + nextWorld + ". Waiting for login...");
+        // Force hop even if we're already on the "next world" to avoid skipping the hop
+        if (nextWorld != -1) {
+            Microbot.log("Hopping to world " + nextWorld);
+            Microbot.hopToWorld(nextWorld);
+            
+            Microbot.log("World hop initiated. Waiting for login...");
             sleepUntil(() -> Microbot.getClient().getLoginIndex() > 0, 8000);
-            sleep(2000,3000);
-            sleepUntil(Microbot::isLoggedIn, 15000);
-             if(Microbot.isLoggedIn()){
-                 Microbot.log("Successfully hopped worlds and logged in.");
-                 
-                 // Check if we've previously interacted with Frankie in this session
-                 NPC frankie = Rs2Npc.getNpc(FRANKIE_NPC_ID_CUSTOM);
-                 if (frankie == null) {
-                     frankie = Rs2Npc.getNpc(FRANKIE_NPC_NAME);
-                 }
-                 
-                 // If we're already near Frankie, go directly to interact with him
-                 if (frankie != null && Microbot.getClient().getLocalPlayer().getWorldLocation().distanceTo(frankie.getWorldLocation()) <= 10) {
-                     Microbot.log("Already near Frankie after world hop, going directly to interaction");
-                     currentState = State.WALKING_TO_FRANKIE;
-                 } else {
-                     currentState = State.CHECK_INITIAL_CONDITIONS;
-                 }
-             } else {
-                 Microbot.log("Failed to log in after hopping. Stopping.");
-                 currentState = State.STOPPED;
-             }
-        } else {
             sleep(2000, 3000);
+            sleepUntil(Microbot::isLoggedIn, 15000);
+            
+            if (Microbot.isLoggedIn()) {
+                Microbot.log("Successfully hopped worlds and logged in.");
+                
+                // Check if we're already near Frankie
+                NPC frankie = Rs2Npc.getNpc(FRANKIE_NPC_ID_CUSTOM);
+                if (frankie == null) {
+                    frankie = Rs2Npc.getNpc(FRANKIE_NPC_NAME);
+                }
+                
+                // If we're already near Frankie, go directly to interact with him
+                if (frankie != null && Microbot.getClient().getLocalPlayer().getWorldLocation().distanceTo(frankie.getWorldLocation()) <= 10) {
+                    Microbot.log("Already near Frankie after world hop, going directly to interaction");
+                    currentState = State.WALKING_TO_FRANKIE;
+                } else {
+                    // Check if we're in the middle of buying more sharks
+                    if (Rs2Inventory.hasItem(RAW_SHARK_ID) && 
+                        Rs2Inventory.count(RAW_SHARK_ID) < TARGET_SHARK_INVENTORY && 
+                        Rs2Inventory.getEmptySlots() >= MIN_SHARKS_TO_BUY) {
+                        // We're continuing to buy more sharks, go directly to Frankie
+                        Microbot.log("Continuing shark buying process, walking directly to Frankie");
+                        currentState = State.WALKING_TO_FRANKIE_AREA;
+                    } else {
+                        // Normal startup sequence
+                        currentState = State.CHECK_INITIAL_CONDITIONS;
+                    }
+                }
+            } else {
+                Microbot.log("Failed to log in after hopping. Stopping.");
+                currentState = State.STOPPED;
+            }
+        } else {
+            // If we couldn't find a world to hop to, still proceed to checking conditions
+            Microbot.log("Could not find a suitable P2P world to hop to. Continuing to check conditions.");
+            sleep(2000, 3000);
+            currentState = State.CHECK_INITIAL_CONDITIONS;
         }
     }
 } 
