@@ -2,6 +2,7 @@ package net.runelite.client.plugins.microbot.magic.aiomagic.scripts;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import javax.inject.Inject;
@@ -9,6 +10,7 @@ import javax.inject.Inject;
 import net.runelite.api.Skill;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
+import net.runelite.client.plugins.microbot.globval.enums.InterfaceTab;
 import net.runelite.client.plugins.microbot.magic.aiomagic.AIOMagicPlugin;
 import net.runelite.client.plugins.microbot.magic.aiomagic.enums.JewellerySelectionType;
 import net.runelite.client.plugins.microbot.magic.aiomagic.enums.JewelleryType;
@@ -21,11 +23,19 @@ import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
+import net.runelite.client.plugins.microbot.util.tabs.Rs2Tab;
+import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
 
 public class EnchantScript extends Script {
 
     private MagicState state = MagicState.CASTING;
     private final AIOMagicPlugin plugin;
+    
+    // Safety tracking variables
+    private int bankFailureCount = 0;
+    private final int maxBankFailures = 5;
+    private int consecutiveEmptyWithdrawals = 0;
+    private final int maxConsecutiveEmptyWithdrawals = 3;
 
     @Inject
     public EnchantScript(AIOMagicPlugin plugin) {
@@ -41,6 +51,10 @@ public class EnchantScript extends Script {
         Rs2AntibanSettings.contextualVariability = true;
         Rs2AntibanSettings.usePlayStyle = true;
         Rs2Antiban.setActivity(Activity.ENCHANTING);
+        
+        // Reset counters when script starts
+        bankFailureCount = 0;
+        consecutiveEmptyWithdrawals = 0;
         
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
             try {
@@ -66,116 +80,114 @@ public class EnchantScript extends Script {
                     shutdown();
                     return;
                 }
+                
+                // Safety check - if we've had too many bank failures, shut down
+                if (bankFailureCount >= maxBankFailures) {
+                    Microbot.showMessage("Shutting down due to repeated banking failures");
+                    shutdown();
+                    return;
+                }
+                
+                // Safety check - if we've had too many consecutive empty withdrawals, shut down
+                if (consecutiveEmptyWithdrawals >= maxConsecutiveEmptyWithdrawals) {
+                    Microbot.showMessage("Shutting down due to repeated empty jewelry withdrawals");
+                    shutdown();
+                    return;
+                }
 
                 switch (state) {
                     case BANKING:
-                        if (!Rs2Bank.isNearBank(15)) {
-                            Rs2Bank.walkToBankAndUseBank();
-                            return;
-                        }
-                        
                         if (!Rs2Bank.isOpen()) {
-                            Rs2Bank.useBank();
-                            return;
+                            // Add retry mechanism for bank opening
+                            int maxRetries = 3;
+                            int retries = 0;
+                            boolean bankOpened = false;
+                            
+                            while (!bankOpened && retries < maxRetries) {
+                                Microbot.status = "Opening bank, attempt " + (retries + 1);
+                                
+                                if (Rs2Bank.isNearBank(15)) {
+                                    bankOpened = Rs2Bank.useBank();
+                                } else {
+                                    bankOpened = Rs2Bank.walkToBankAndUseBank();
+                                }
+                                
+                                if (!bankOpened) {
+                                    retries++;
+                                    bankFailureCount++; // Track total banking failures across attempts
+                                    sleep(500, 800);
+                                } else {
+                                    bankFailureCount = 0; // Reset on successful bank open
+                                }
+                            }
+                            
+                            // Wait for bank interface to appear
+                            if (!sleepUntil(() -> Rs2Bank.isOpen(), 3000)) {
+                                Microbot.status = "Failed to open bank after " + maxRetries + " attempts";
+                                return;
+                            }
                         }
 
                         // Deposit all enchanted jewellery
                         List<JewelleryType> jewelryToProcess = getJewelleryForCurrentConfig();
-                        
+                        boolean depositedSomething = false;
                         for (JewelleryType jewellery : jewelryToProcess) {
                             if (Rs2Inventory.hasItem(jewellery.getEnchantedItemId())) {
                                 Rs2Bank.depositAll(jewellery.getEnchantedItemId());
+                                sleep(100, 200); 
+                                depositedSomething = true;
                             }
                         }
 
-                        // Check and withdraw cosmic runes if needed
+                        if (depositedSomething) {
+                            sleep(200, 400); 
+                            // Wait for inventory to update after depositing
+                            Rs2Inventory.waitForInventoryChanges(1000);
+                        }
+
+                        // Check and withdraw cosmic runes
                         if (!Rs2Inventory.hasItemAmount("Cosmic rune", 500)) {
-                            if (!Rs2Bank.hasBankItem("Cosmic rune")) {
-                                Microbot.showMessage("Out of cosmic runes");
-                                shutdown();
-                                return;
-                            }
-                            Rs2Bank.withdrawX("Cosmic rune", 500);
+                            checkAndWithdrawRunes("Cosmic rune", "cosmic rune", 500);
                         }
 
                         // Check and withdraw the other runes needed based on the enchantment level
                         switch (plugin.getEnchantmentSpell().getLevel()) {
                             case 1: // Water runes for level 1 enchant
                                 if (!Rs2Inventory.hasItemAmount("Water rune", 500)) {
-                                    if (!Rs2Bank.hasBankItem("Water rune")) {
-                                        Microbot.showMessage("Out of water runes");
-                                        shutdown();
-                                        return;
-                                    }
-                                    Rs2Bank.withdrawX("Water rune", 500);
+                                    checkAndWithdrawRunes("Water rune", "water rune", 500);
                                 }
                                 break;
                             case 2: // Air runes for level 2 enchant
                                 if (!Rs2Inventory.hasItemAmount("Air rune", 1500)) {
-                                    if (!Rs2Bank.hasBankItem("Air rune")) {
-                                        Microbot.showMessage("Out of air runes");
-                                        shutdown();
-                                        return;
-                                    }
-                                    Rs2Bank.withdrawX("Air rune", 1500);
+                                    checkAndWithdrawRunes("Air rune", "air rune", 1500);
                                 }
                                 break;
                             case 3: // Fire runes for level 3 enchant
                                 if (!Rs2Inventory.hasItemAmount("Fire rune", 2500)) {
-                                    if (!Rs2Bank.hasBankItem("Fire rune")) {
-                                        Microbot.showMessage("Out of fire runes");
-                                        shutdown();
-                                        return;
-                                    }
-                                    Rs2Bank.withdrawX("Fire rune", 2500);
+                                    checkAndWithdrawRunes("Fire rune", "fire rune", 2500);
                                 }
                                 break;
                             case 4: // Earth runes for level 4 enchant
                                 if (!Rs2Inventory.hasItemAmount("Earth rune", 5000)) {
-                                    if (!Rs2Bank.hasBankItem("Earth rune")) {
-                                        Microbot.showMessage("Out of earth runes");
-                                        shutdown();
-                                        return;
-                                    }
-                                    Rs2Bank.withdrawX("Earth rune", 5000);
+                                    checkAndWithdrawRunes("Earth rune", "earth rune", 5000);
                                 }
                                 break;
                             case 5: // Water runes for level 5 enchant
                                 if (!Rs2Inventory.hasItemAmount("Water rune", 7500)) {
-                                    if (!Rs2Bank.hasBankItem("Water rune")) {
-                                        Microbot.showMessage("Out of water runes");
-                                        shutdown();
-                                        return;
-                                    }
-                                    Rs2Bank.withdrawX("Water rune", 7500);
+                                    checkAndWithdrawRunes("Water rune", "water rune", 7500);
                                 }
                                 break;
                             case 6: // Fire runes for level 6 enchant
                                 if (!Rs2Inventory.hasItemAmount("Fire rune", 10000)) {
-                                    if (!Rs2Bank.hasBankItem("Fire rune")) {
-                                        Microbot.showMessage("Out of fire runes");
-                                        shutdown();
-                                        return;
-                                    }
-                                    Rs2Bank.withdrawX("Fire rune", 10000);
+                                    checkAndWithdrawRunes("Fire rune", "fire rune", 10000);
                                 }
                                 break;
                             case 7: // Soul and Blood runes for level 7 enchant
                                 if (!Rs2Inventory.hasItemAmount("Soul rune", 1000)) {
-                                    if (!Rs2Bank.hasBankItem("Soul rune")) {
-                                        Microbot.showMessage("Out of soul runes");
-                                        shutdown();
-                                        return;
-                                    }
-                                    Rs2Bank.withdrawX("Soul rune", 1000);
+                                    checkAndWithdrawRunes("Soul rune", "soul rune", 1000);
                                 }
                                 if (!Rs2Inventory.hasItemAmount("Blood rune", 1000)) {
-                                    if (!Rs2Bank.hasBankItem("Blood rune")) {
-                                        Microbot.showMessage("Out of blood runes");
-                                        shutdown();
-                                        return;
-                                    }
-                                    Rs2Bank.withdrawX("Blood rune", 1000);
+                                    checkAndWithdrawRunes("Blood rune", "blood rune", 1000);
                                 }
                                 break;
                         }
@@ -184,28 +196,67 @@ public class EnchantScript extends Script {
                         int emptySpace = Rs2Inventory.getEmptySlots();
                         if (emptySpace > 0) {
                             // Try to withdraw specific unenchanted jewellery based on the selection
-                            boolean foundJewellery = false;
+                            boolean foundJewelleryToWithdraw = false;
+                            int startingItemCount = Rs2Inventory.count();
                             
                             for (JewelleryType jewellery : jewelryToProcess) {
                                 if (Rs2Bank.hasBankItem(jewellery.getUnenchantedItemId(), 1)) {
+                                    // Verify the item is really there - sometimes hasBankItem can be inaccurate due to synchronization
+                                    Rs2ItemModel bankItem = Rs2Bank.getBankItem(jewellery.getUnenchantedItemId());
+                                    if (bankItem == null || bankItem.getQuantity() < 1) {
+                                        // Item not actually in bank, continue to next type
+                                        continue;
+                                    }
+                                    
+                                    // First try withdrawing all
                                     Rs2Bank.withdrawAll(jewellery.getUnenchantedItemId());
-                                    foundJewellery = true;
-                                    break;
+                                    sleep(300, 500);
+                                    
+                                    // Verify that items were actually withdrawn
+                                    if (Rs2Inventory.count() > startingItemCount) {
+                                        foundJewelleryToWithdraw = true;
+                                        consecutiveEmptyWithdrawals = 0; // Reset counter on successful withdrawal
+                                        break;
+                                    }
+                                    
+                                    // If withdrawAll failed, try explicit withdraw with X=28
+                                    Rs2Bank.withdrawX(jewellery.getUnenchantedItemId(), Math.min(28, emptySpace));
+                                    sleep(300, 500);
+                                    
+                                    // Check again if withdrawal succeeded
+                                    if (Rs2Inventory.count() > startingItemCount) {
+                                        foundJewelleryToWithdraw = true;
+                                        consecutiveEmptyWithdrawals = 0; // Reset counter on successful withdrawal
+                                        break;
+                                    }
                                 }
                             }
                             
-                            if (!foundJewellery) {
-                                String selectedType = plugin.getJewelleryType() == JewellerySelectionType.NONE ? 
-                                        "any" : plugin.getJewelleryType().getName();
+                            // Wait longer for inventory to update after withdrawal attempt
+                            sleep(500, 700);
+                            
+                            if (!foundJewelleryToWithdraw || !hasJewelleryToEnchant(jewelryToProcess)) {
+                                consecutiveEmptyWithdrawals++; // Increment counter on failed withdrawal
                                 
-                                Microbot.showMessage("No compatible " + selectedType + " jewellery found for enchantment level " + 
-                                        plugin.getEnchantmentSpell().getLevel());
-                                shutdown();
-                                return;
+                                if (consecutiveEmptyWithdrawals >= maxConsecutiveEmptyWithdrawals) {
+                                    String selectedType = plugin.getJewelleryType() == JewellerySelectionType.NONE ? 
+                                            "any" : plugin.getJewelleryType().getName();
+                                    
+                                    Microbot.showMessage("No compatible " + selectedType + " jewellery found for enchantment level " + 
+                                            plugin.getEnchantmentSpell().getLevel());
+                                    shutdown();
+                                    return;
+                                }
+                                
+                                // Try closing and reopening the bank
+                                Rs2Bank.closeBank();
+                                sleep(500, 700);
+                                return; // Return to try again next cycle
                             }
                         }
 
                         Rs2Bank.closeBank();
+                        sleepUntil(() -> !Rs2Bank.isOpen(), 2000);
                         break;
                         
                     case CASTING:
@@ -217,16 +268,48 @@ public class EnchantScript extends Script {
                             return;
                         }
                         
+                        // Check for the required runes using the default method
                         if (!Rs2Magic.hasRequiredRunes(plugin.getEnchantmentSpell().getRs2Spell())) {
-                            Microbot.log("Missing required runes for enchantment");
-                            return;
+                            // Double-check with our more tolerant case-insensitive method before giving up
+                            if (!hasEnchantmentRunes()) {
+                                Microbot.log("Missing required runes for enchantment");
+                                return;
+                            } else {
+                                // We found the runes via our custom check
+                                Microbot.status = "Found runes, continuing with enchantment...";
+                            }
                         }
                         
-                        // Cast the enchantment spell on the jewellery item
+                        // Properly cast the enchantment spell on the jewellery item
+                        if (Rs2Tab.getCurrentTab() != InterfaceTab.MAGIC) {
+                            Rs2Tab.switchToMagicTab();
+                            sleep(300, 500);
+                        }
+                        
+                        // Clear previous status
+                        Microbot.status = "Enchanting jewelry";
+                        
+                        // First open the enchantment interface if needed
+                        if (!Rs2Widget.hasWidgetText("Jewellery Enchantments", 218, 3, true)) {
+                            // Click the enchantment button to open the interface
+                            if (Rs2Widget.clickWidget("Jewellery Enchantments", Optional.of(218), 3, true)) {
+                                sleep(500, 700);
+                            }
+                        }
+                        
+                        // Now cast the specific enchantment spell - using the most direct method
                         Rs2Magic.cast(plugin.getEnchantmentSpell().getRs2Spell().getAction());
                         sleep(600, 800);
-                        Rs2Inventory.interact(jewelleryItem);
-                        Rs2Player.waitForXpDrop(Skill.MAGIC, 5000, false);
+                        
+                        // Make sure spell is selected before clicking the item
+                        if (Microbot.getClient().isWidgetSelected()) {
+                            // Simple interact with the item - more reliable
+                            Rs2Inventory.interact(jewelleryItem, "Cast");
+                            Rs2Player.waitForXpDrop(Skill.MAGIC, 3000, false);
+                        } else {
+                            Microbot.status = "Failed to select spell, retrying...";
+                            return;
+                        }
                         break;
                 }
 
@@ -237,7 +320,7 @@ public class EnchantScript extends Script {
             } catch (Exception ex) {
                 System.out.println(ex.getMessage());
             }
-        }, 0, 1000, TimeUnit.MILLISECONDS);
+        }, 0, 150, TimeUnit.MILLISECONDS);
         return true;
     }
 
@@ -345,5 +428,78 @@ public class EnchantScript extends Script {
         }
         
         return result;
+    }
+
+    /**
+     * Checks if the inventory contains any unenchanted jewellery from the provided list.
+     * 
+     * @param jewelryList List of jewellery types to check for
+     * @return true if at least one unenchanted jewellery item is found
+     */
+    private boolean hasJewelleryToEnchant(List<JewelleryType> jewelryList) {
+        for (Rs2ItemModel item : Rs2Inventory.items()) {
+            for (JewelleryType jewellery : jewelryList) {
+                if (item.getId() == jewellery.getUnenchantedItemId()) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Helper method to check for runes in both uppercase and lowercase versions,
+     * and withdraw them if not found in inventory
+     * 
+     * @param properName Properly capitalized rune name
+     * @param lowercaseName Lowercase rune name for alternative check
+     * @param amount Amount needed
+     */
+    private void checkAndWithdrawRunes(String properName, String lowercaseName, int amount) {
+        // Try alternate check with lowercase - fixes case sensitivity issues
+        if (!Rs2Inventory.hasItem(lowercaseName) && !Rs2Inventory.hasItem(properName)) {
+            if (!Rs2Bank.hasBankItem(properName) && !Rs2Bank.hasBankItem(lowercaseName)) {
+                Microbot.showMessage("Out of " + lowercaseName);
+                shutdown();
+                return;
+            }
+            Rs2Bank.withdrawX(properName, amount);
+            sleep(150, 250); 
+        } else {
+            Microbot.status = "Have " + lowercaseName + ", continuing...";
+        }
+    }
+
+    /**
+     * Custom method to check if we have runes for enchantment spell, handling case sensitivity
+     */
+    private boolean hasEnchantmentRunes() {
+        int level = plugin.getEnchantmentSpell().getLevel();
+        
+        // All enchantment spells require cosmic runes
+        if (!Rs2Inventory.hasItem("Cosmic rune") && !Rs2Inventory.hasItem("cosmic rune")) {
+            return false;
+        }
+        
+        // Check for other runes based on enchantment level
+        switch (level) {
+            case 1:
+                return Rs2Inventory.hasItem("Water rune") || Rs2Inventory.hasItem("water rune");
+            case 2:
+                return Rs2Inventory.hasItem("Air rune") || Rs2Inventory.hasItem("air rune");
+            case 3:
+                return Rs2Inventory.hasItem("Fire rune") || Rs2Inventory.hasItem("fire rune");
+            case 4:
+                return Rs2Inventory.hasItem("Earth rune") || Rs2Inventory.hasItem("earth rune");
+            case 5:
+                return Rs2Inventory.hasItem("Water rune") || Rs2Inventory.hasItem("water rune");
+            case 6:
+                return Rs2Inventory.hasItem("Fire rune") || Rs2Inventory.hasItem("fire rune");
+            case 7:
+                return (Rs2Inventory.hasItem("Soul rune") || Rs2Inventory.hasItem("soul rune")) &&
+                       (Rs2Inventory.hasItem("Blood rune") || Rs2Inventory.hasItem("blood rune"));
+            default:
+                return false;
+        }
     }
 } 

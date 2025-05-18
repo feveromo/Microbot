@@ -69,7 +69,7 @@ public class AIOMagicPlugin extends Plugin {
 	@Inject
 	private EnchantScript enchantScript;
 
-	public static String version = "1.1.0";
+	public static String version = "1.1.1";
 	
 	@Getter
 	private Rs2CombatSpells combatSpell;
