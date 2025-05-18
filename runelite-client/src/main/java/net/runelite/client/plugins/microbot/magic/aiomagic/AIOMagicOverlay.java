@@ -1,21 +1,28 @@
 package net.runelite.client.plugins.microbot.magic.aiomagic;
 
+import java.awt.Dimension;
+import java.awt.Graphics2D;
+
+import javax.inject.Inject;
+
 import net.runelite.client.plugins.microbot.Microbot;
-import net.runelite.client.plugins.microbot.example.ExamplePlugin;
+import net.runelite.client.plugins.microbot.magic.aiomagic.enums.MagicActivity;
 import net.runelite.client.ui.overlay.OverlayPanel;
 import net.runelite.client.ui.overlay.OverlayPosition;
 import net.runelite.client.ui.overlay.components.LineComponent;
 import net.runelite.client.ui.overlay.components.TitleComponent;
 import net.runelite.client.util.ColorUtil;
 
-import javax.inject.Inject;
-import java.awt.*;
-
 public class AIOMagicOverlay extends OverlayPanel {
+
+    private final AIOMagicPlugin plugin;
+    @Inject
+    private AIOMagicConfig config;
 
     @Inject
     AIOMagicOverlay(AIOMagicPlugin plugin) {
         super(plugin);
+        this.plugin = plugin;
         setPosition(OverlayPosition.TOP_LEFT);
         setNaughty();
     }
@@ -34,7 +41,19 @@ public class AIOMagicOverlay extends OverlayPanel {
             panelComponent.getChildren().add(LineComponent.builder()
                     .left(Microbot.status)
                     .build());
-
+                    
+            // Display additional information based on activity
+            if (config.magicActivity() == MagicActivity.ENCHANTING) {
+                panelComponent.getChildren().add(LineComponent.builder()
+                        .left("Spell:")
+                        .right(plugin.getEnchantmentSpell().toString())
+                        .build());
+                        
+                panelComponent.getChildren().add(LineComponent.builder()
+                        .left("Jewellery:")
+                        .right(plugin.getJewelleryType().getName())
+                        .build());
+            }
 
         } catch(Exception ex) {
             System.out.println(ex.getMessage());

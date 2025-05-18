@@ -1,5 +1,9 @@
 package net.runelite.client.plugins.microbot.magic.aiomagic.scripts;
 
+import java.util.concurrent.TimeUnit;
+
+import javax.inject.Inject;
+
 import net.runelite.api.Skill;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
@@ -14,9 +18,6 @@ import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
 import net.runelite.client.plugins.microbot.util.npc.Rs2Npc;
 import net.runelite.client.plugins.microbot.util.npc.Rs2NpcModel;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
-
-import javax.inject.Inject;
-import java.util.concurrent.TimeUnit;
 
 public class StunAlchScript extends Script {
 

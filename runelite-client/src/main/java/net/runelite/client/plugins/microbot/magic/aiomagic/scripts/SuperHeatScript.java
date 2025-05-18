@@ -1,5 +1,10 @@
 package net.runelite.client.plugins.microbot.magic.aiomagic.scripts;
 
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+
+import javax.inject.Inject;
+
 import net.runelite.api.ItemID;
 import net.runelite.api.Skill;
 import net.runelite.client.plugins.microbot.Microbot;
@@ -18,10 +23,6 @@ import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Staff;
 import net.runelite.client.plugins.microbot.util.magic.Runes;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
-
-import javax.inject.Inject;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 public class SuperHeatScript extends Script {
 

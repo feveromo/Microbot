@@ -4,6 +4,8 @@ import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
 import net.runelite.client.config.ConfigSection;
+import net.runelite.client.plugins.microbot.magic.aiomagic.enums.EnchantmentSpell;
+import net.runelite.client.plugins.microbot.magic.aiomagic.enums.JewellerySelectionType;
 import net.runelite.client.plugins.microbot.magic.aiomagic.enums.MagicActivity;
 import net.runelite.client.plugins.microbot.magic.aiomagic.enums.StunSpell;
 import net.runelite.client.plugins.microbot.magic.aiomagic.enums.SuperHeatItem;
@@ -22,6 +24,8 @@ public interface AIOMagicConfig extends Config {
 	String teleportSpell = "teleportSpell";
 	String stunSpell = "stunSpell";
 	String stunNpcName = "stunNpcName";
+	String enchantmentSpell = "enchantmentSpell";
+	String jewelleryType = "jewelleryType";
 
 	@ConfigSection(
 			name = "General Settings",
@@ -64,6 +68,13 @@ public interface AIOMagicConfig extends Config {
 			position = 3
 	)
 	String teleportSection = "teleport";
+
+	@ConfigSection(
+			name = "Enchantment Settings",
+			description = "Configure enchantment settings",
+			position = 4
+	)
+	String enchantmentSection = "enchantment";
 
 	@ConfigItem(
 			keyName = activity,
@@ -150,5 +161,27 @@ public interface AIOMagicConfig extends Config {
 	)
 	default TeleportSpell teleportSpell() {
 		return TeleportSpell.VARROCK_TELEPORT;
+	}
+	
+	@ConfigItem(
+			keyName = enchantmentSpell,
+			name = "Enchantment Spell",
+			description = "Select the enchantment spell you would like to use",
+			position = 0,
+			section = enchantmentSection
+	)
+	default EnchantmentSpell enchantmentSpell() {
+		return EnchantmentSpell.LVL_1_ENCHANT;
+	}
+
+	@ConfigItem(
+			keyName = jewelleryType,
+			name = "Jewellery Type",
+			description = "Select the type of jewellery you would like to enchant",
+			position = 1,
+			section = enchantmentSection
+	)
+	default JewellerySelectionType jewelleryType() {
+		return JewellerySelectionType.NONE;
 	}
 }

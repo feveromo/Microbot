@@ -1,9 +1,12 @@
 package net.runelite.client.plugins.microbot.magic.aiomagic.scripts;
 
+import java.util.concurrent.TimeUnit;
+
+import javax.inject.Inject;
+
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
 import net.runelite.client.plugins.microbot.magic.aiomagic.AIOMagicPlugin;
-import net.runelite.client.plugins.microbot.magic.orbcharger.OrbChargerPlugin;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
 import net.runelite.client.plugins.microbot.util.antiban.enums.Activity;
@@ -11,9 +14,6 @@ import net.runelite.client.plugins.microbot.util.combat.Rs2Combat;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
 import net.runelite.client.plugins.microbot.util.npc.Rs2Npc;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
-
-import javax.inject.Inject;
-import java.util.concurrent.TimeUnit;
 
 public class SplashScript extends Script {
 

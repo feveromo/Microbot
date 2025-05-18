@@ -1,5 +1,9 @@
 package net.runelite.client.plugins.microbot.magic.aiomagic.scripts;
 
+import java.util.concurrent.TimeUnit;
+
+import javax.inject.Inject;
+
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
 import net.runelite.client.plugins.microbot.magic.aiomagic.AIOMagicPlugin;
@@ -8,9 +12,6 @@ import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
 import net.runelite.client.plugins.microbot.util.antiban.enums.Activity;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
-
-import javax.inject.Inject;
-import java.util.concurrent.TimeUnit;
 
 public class TeleportScript extends Script {
     

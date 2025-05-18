@@ -3,7 +3,6 @@ package net.runelite.client.plugins.microbot.magic.aiomagic.enums;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Spells;
-import net.runelite.client.plugins.skillcalculator.skills.MagicAction;
 
 @Getter
 @RequiredArgsConstructor

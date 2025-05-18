@@ -1,5 +1,9 @@
 package net.runelite.client.plugins.microbot.magic.aiomagic.scripts;
 
+import java.util.concurrent.TimeUnit;
+
+import javax.inject.Inject;
+
 import net.runelite.api.Skill;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
@@ -12,10 +16,6 @@ import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
-import net.runelite.client.plugins.skillcalculator.skills.MagicAction;
-
-import javax.inject.Inject;
-import java.util.concurrent.TimeUnit;
 
 public class TeleAlchScript extends Script {
 

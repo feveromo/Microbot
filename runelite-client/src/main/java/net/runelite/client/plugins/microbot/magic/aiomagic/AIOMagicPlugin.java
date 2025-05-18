@@ -1,33 +1,38 @@
 package net.runelite.client.plugins.microbot.magic.aiomagic;
 
+import java.awt.AWTException;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.stream.Collectors;
+
+import javax.inject.Inject;
+
 import com.google.inject.Provides;
+
 import lombok.Getter;
-import net.runelite.api.GraphicID;
-import net.runelite.api.NPC;
-import net.runelite.api.Player;
 import net.runelite.api.Skill;
-import net.runelite.api.events.GraphicChanged;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
-import net.runelite.client.plugins.microbot.Microbot;
+import net.runelite.client.plugins.microbot.magic.aiomagic.enums.EnchantmentSpell;
+import net.runelite.client.plugins.microbot.magic.aiomagic.enums.JewellerySelectionType;
 import net.runelite.client.plugins.microbot.magic.aiomagic.enums.StunSpell;
 import net.runelite.client.plugins.microbot.magic.aiomagic.enums.SuperHeatItem;
 import net.runelite.client.plugins.microbot.magic.aiomagic.enums.TeleportSpell;
-import net.runelite.client.plugins.microbot.magic.aiomagic.scripts.*;
+import net.runelite.client.plugins.microbot.magic.aiomagic.scripts.AlchScript;
+import net.runelite.client.plugins.microbot.magic.aiomagic.scripts.EnchantScript;
+import net.runelite.client.plugins.microbot.magic.aiomagic.scripts.SplashScript;
+import net.runelite.client.plugins.microbot.magic.aiomagic.scripts.StunAlchScript;
+import net.runelite.client.plugins.microbot.magic.aiomagic.scripts.SuperHeatScript;
+import net.runelite.client.plugins.microbot.magic.aiomagic.scripts.TeleAlchScript;
+import net.runelite.client.plugins.microbot.magic.aiomagic.scripts.TeleportScript;
 import net.runelite.client.plugins.microbot.util.magic.Rs2CombatSpells;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Spells;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.ui.overlay.OverlayManager;
-
-import javax.inject.Inject;
-import java.awt.*;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.stream.Collectors;
 
 @PluginDescriptor(
 		name = PluginDescriptor.GMason + "AIO Magic",
@@ -61,6 +66,8 @@ public class AIOMagicPlugin extends Plugin {
 	private TeleAlchScript teleAlchScript;
 	@Inject
 	private StunAlchScript stunAlchScript;
+	@Inject
+	private EnchantScript enchantScript;
 
 	public static String version = "1.1.0";
 	
@@ -78,6 +85,10 @@ public class AIOMagicPlugin extends Plugin {
 	private StunSpell stunSpell;
 	@Getter
 	private String stunNpcName;
+	@Getter
+	private EnchantmentSpell enchantmentSpell;
+	@Getter
+	private JewellerySelectionType jewelleryType;
 
 	@Override
 	protected void startUp() throws AWTException {
@@ -88,6 +99,8 @@ public class AIOMagicPlugin extends Plugin {
 		teleportSpell = config.teleportSpell();
 		stunSpell = config.stunSpell();
 		stunNpcName = config.stunNpcName();
+		enchantmentSpell = config.enchantmentSpell();
+		jewelleryType = config.jewelleryType();
 
 		if (overlayManager != null) {
 			overlayManager.add(aioMagicOverlay);
@@ -112,6 +125,9 @@ public class AIOMagicPlugin extends Plugin {
 			case STUNALCH:
 				stunAlchScript.run();
 				break;
+			case ENCHANTING:
+				enchantScript.run();
+				break;
 		}
 	}
 
@@ -122,6 +138,7 @@ public class AIOMagicPlugin extends Plugin {
 		teleportScript.shutdown();
 		teleAlchScript.shutdown();
 		stunAlchScript.shutdown();
+		enchantScript.shutdown();
 		overlayManager.remove(aioMagicOverlay);
 	}
 
@@ -155,6 +172,14 @@ public class AIOMagicPlugin extends Plugin {
 
 		if (event.getKey().equals(AIOMagicConfig.stunNpcName)) {
 			stunNpcName = config.stunNpcName();
+		}
+		
+		if (event.getKey().equals(AIOMagicConfig.enchantmentSpell)) {
+			enchantmentSpell = config.enchantmentSpell();
+		}
+		
+		if (event.getKey().equals(AIOMagicConfig.jewelleryType)) {
+			jewelleryType = config.jewelleryType();
 		}
 	}
 
