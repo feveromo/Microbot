@@ -90,7 +90,3 @@ Files like `ActorModel.java`, `Global.java`, and `Rs2InventorySetup.java` direct
 
 By leveraging these utilities, developers can build more complex and robust scripts with less effort, focusing on the script's logic rather than the intricacies of game client interaction.
 
-
-
-
-
