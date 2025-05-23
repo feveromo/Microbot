@@ -7,6 +7,7 @@ import java.util.concurrent.TimeUnit;
 
 import javax.inject.Inject;
 
+import net.runelite.api.EquipmentInventorySlot;
 import net.runelite.api.Skill;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
@@ -19,9 +20,12 @@ import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
 import net.runelite.client.plugins.microbot.util.antiban.enums.Activity;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
+import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
+import net.runelite.client.plugins.microbot.util.magic.Rs2Staff;
+import net.runelite.client.plugins.microbot.util.magic.Runes;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.tabs.Rs2Tab;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
@@ -456,8 +460,28 @@ public class EnchantScript extends Script {
      * @param amount Amount needed
      */
     private void checkAndWithdrawRunes(String properName, String lowercaseName, int amount) {
-        // Try alternate check with lowercase - fixes case sensitivity issues
-        if (!Rs2Inventory.hasItem(lowercaseName) && !Rs2Inventory.hasItem(properName)) {
+        // Check if the rune is provided by an equipped staff first
+        boolean isRuneProvided = false;
+        
+        // Convert rune name to Runes enum type
+        Runes runeType = null;
+        if (properName.equalsIgnoreCase("Air rune")) runeType = Runes.AIR;
+        else if (properName.equalsIgnoreCase("Water rune")) runeType = Runes.WATER;
+        else if (properName.equalsIgnoreCase("Earth rune")) runeType = Runes.EARTH;
+        else if (properName.equalsIgnoreCase("Fire rune")) runeType = Runes.FIRE;
+        
+        // Check if the rune is provided by equipped staff
+        Rs2ItemModel equippedWeapon = Rs2Equipment.get(EquipmentInventorySlot.WEAPON);
+        if (equippedWeapon != null && runeType != null) {
+            Rs2Staff equippedStaff = Rs2Magic.getRs2Staff(equippedWeapon.getId());
+            if (equippedStaff != Rs2Staff.NONE && equippedStaff.getRunes().contains(runeType)) {
+                isRuneProvided = true;
+                Microbot.status = "Equipped staff provides infinite " + lowercaseName;
+            }
+        }
+        
+        // Only withdraw if we need the rune (not provided by staff and not already in inventory)
+        if (!isRuneProvided && !Rs2Inventory.hasItem(lowercaseName) && !Rs2Inventory.hasItem(properName)) {
             if (!Rs2Bank.hasBankItem(properName) && !Rs2Bank.hasBankItem(lowercaseName)) {
                 Microbot.showMessage("Out of " + lowercaseName);
                 shutdown();
@@ -466,12 +490,15 @@ public class EnchantScript extends Script {
             Rs2Bank.withdrawX(properName, amount);
             sleep(150, 250); 
         } else {
-            Microbot.status = "Have " + lowercaseName + ", continuing...";
+            Microbot.status = isRuneProvided ? 
+                "Staff provides " + lowercaseName + ", no need to withdraw" : 
+                "Have " + lowercaseName + ", continuing...";
         }
     }
 
     /**
      * Custom method to check if we have runes for enchantment spell, handling case sensitivity
+     * and checking for equipped staffs
      */
     private boolean hasEnchantmentRunes() {
         int level = plugin.getEnchantmentSpell().getLevel();
@@ -481,23 +508,40 @@ public class EnchantScript extends Script {
             return false;
         }
         
+        // Check for equipped staff that provides runes
+        Rs2ItemModel equippedWeapon = Rs2Equipment.get(EquipmentInventorySlot.WEAPON);
+        Rs2Staff equippedStaff = null;
+        
+        if (equippedWeapon != null) {
+            equippedStaff = Rs2Magic.getRs2Staff(equippedWeapon.getId());
+        }
+        
         // Check for other runes based on enchantment level
         switch (level) {
-            case 1:
-                return Rs2Inventory.hasItem("Water rune") || Rs2Inventory.hasItem("water rune");
-            case 2:
-                return Rs2Inventory.hasItem("Air rune") || Rs2Inventory.hasItem("air rune");
-            case 3:
-                return Rs2Inventory.hasItem("Fire rune") || Rs2Inventory.hasItem("fire rune");
-            case 4:
-                return Rs2Inventory.hasItem("Earth rune") || Rs2Inventory.hasItem("earth rune");
-            case 5:
-                return Rs2Inventory.hasItem("Water rune") || Rs2Inventory.hasItem("water rune");
-            case 6:
-                return Rs2Inventory.hasItem("Fire rune") || Rs2Inventory.hasItem("fire rune");
-            case 7:
-                return (Rs2Inventory.hasItem("Soul rune") || Rs2Inventory.hasItem("soul rune")) &&
-                       (Rs2Inventory.hasItem("Blood rune") || Rs2Inventory.hasItem("blood rune"));
+            case 1: // Water runes for level 1 enchant
+                return (equippedStaff != null && equippedStaff != Rs2Staff.NONE && equippedStaff.getRunes().contains(Runes.WATER)) ||
+                       Rs2Inventory.hasItem("Water rune") || Rs2Inventory.hasItem("water rune");
+            case 2: // Air runes for level 2 enchant
+                return (equippedStaff != null && equippedStaff != Rs2Staff.NONE && equippedStaff.getRunes().contains(Runes.AIR)) ||
+                       Rs2Inventory.hasItem("Air rune") || Rs2Inventory.hasItem("air rune");
+            case 3: // Fire runes for level 3 enchant
+                return (equippedStaff != null && equippedStaff != Rs2Staff.NONE && equippedStaff.getRunes().contains(Runes.FIRE)) ||
+                       Rs2Inventory.hasItem("Fire rune") || Rs2Inventory.hasItem("fire rune");
+            case 4: // Earth runes for level 4 enchant
+                return (equippedStaff != null && equippedStaff != Rs2Staff.NONE && equippedStaff.getRunes().contains(Runes.EARTH)) ||
+                       Rs2Inventory.hasItem("Earth rune") || Rs2Inventory.hasItem("earth rune");
+            case 5: // Water runes for level 5 enchant
+                return (equippedStaff != null && equippedStaff != Rs2Staff.NONE && equippedStaff.getRunes().contains(Runes.WATER)) ||
+                       Rs2Inventory.hasItem("Water rune") || Rs2Inventory.hasItem("water rune");
+            case 6: // Fire runes for level 6 enchant
+                return (equippedStaff != null && equippedStaff != Rs2Staff.NONE && equippedStaff.getRunes().contains(Runes.FIRE)) ||
+                       Rs2Inventory.hasItem("Fire rune") || Rs2Inventory.hasItem("fire rune");
+            case 7: // Soul and Blood runes for level 7 enchant
+                boolean hasSoulRunes = (Rs2Inventory.hasItem("Soul rune") || Rs2Inventory.hasItem("soul rune"));
+                boolean hasBloodRunes = (Rs2Inventory.hasItem("Blood rune") || Rs2Inventory.hasItem("blood rune"));
+                
+                // For level 7, we need both Soul and Blood runes - no staff provides both
+                return hasSoulRunes && hasBloodRunes;
             default:
                 return false;
         }
