@@ -191,24 +191,32 @@ public class revKillerScript extends Script {
         WorldPoint fourthTile = new WorldPoint(3244,10222,0);
         WorldPoint fifthTile = new WorldPoint(3248,10225,0);
 
+        if(Rs2GroundItem.isItemBasedOnValueOnGround(500,10)){
+            return;
+        }
 
-            if(Rs2Player.getWorldLocation().equals(fifthTile)){
-                if(weAreInCombat()) {
-                    Microbot.log("We've all ready jammed the knight");
-                    return;
-                } else {
-                    Microbot.log("We need to click the rev.");
-                    if(Rs2Npc.getNpc("Revenant knight")!=null && Rs2Npc.getNpc("Revenant knight").getWorldLocation().distanceTo(Rs2Player.getWorldLocation())<=7) {
-                        if (Rs2Npc.interact(Rs2Npc.getNpc("Revenant knight"), "Attack")) {
-                            Microbot.log("We attacked the knight");
-                            return;
-                        }
-                    } else {
-                        Microbot.log("We need to re-jam the knight");
+        if(!areWeEquipped()||isItTimeToGo()){
+            return;
+        }
+
+        if(Rs2Player.getWorldLocation().equals(fifthTile)){
+            if(weAreInCombat()) {
+                Microbot.log("We've all ready jammed the knight");
+                return;
+            } else {
+                Microbot.log("We need to click the rev.");
+                if(Rs2Npc.getNpc("Revenant knight")!=null && Rs2Npc.getNpc("Revenant knight").getWorldLocation().distanceTo(Rs2Player.getWorldLocation())<=7) {
+                    if (Rs2Npc.interact(Rs2Npc.getNpc("Revenant knight"), "Attack")) {
+                        Microbot.log("We attacked the knight");
+                        return;
                     }
+                } else {
+                    Microbot.log("We need to re-jam the knight");
                 }
             }
+        }
 
+        drinkStamPotion();
 
         playerCheck();
 
@@ -444,37 +452,45 @@ public class revKillerScript extends Script {
     }
     public void getAwayFromPkerKnight(){
         Rs2Walker.setTarget(null);
-        if(!Rs2Combat.inCombat()) {
-            if (Microbot.isLoggedIn()) {
-                while (Microbot.isLoggedIn()) {
-                    if (!super.isRunning()) {
-                        break;
-                    }
-                    if (!Microbot.isLoggedIn()) {
-                        break;
-                    }
-                    Rs2Player.logout();
-                    sleepUntil(() -> !Microbot.isLoggedIn(), Rs2Random.between(250, 500));
-                    sleep(1000, 3000);
+        int io = 0;
+        int tries = 2;
+        if (Microbot.isLoggedIn()) {
+            while (Microbot.isLoggedIn()) {
+                if (!super.isRunning()) {
+                    break;
                 }
-            }
-            if (!Microbot.isLoggedIn()) {
-                while (!Microbot.isLoggedIn()) {
-                    if (!super.isRunning()) {
-                        break;
-                    }
-                    if (Microbot.isLoggedIn()) {
-                        break;
-                    }
-                    sleep(1000, 3000);
-                    if (!Microbot.isLoggedIn()) {
-                        new Login(Login.getRandomWorld(Login.activeProfile.isMember()));
-                        sleepUntil(() -> Microbot.isLoggedIn(), Rs2Random.between(10000, 20000));
-                    }
+                if (!Microbot.isLoggedIn()) {
+                    break;
                 }
+                Rs2Player.logout();
+                sleepUntil(() -> !Microbot.isLoggedIn(), Rs2Random.between(250, 500));
+                sleep(1000, 3000);
+                if(Rs2Player.isInCombat() && Microbot.isLoggedIn() && io>=tries){
+                    Microbot.log("We can't log out, running away instead.");
+                    break;
+                }
+                io++;
             }
         }
-        if(Rs2Combat.inCombat()) {
+        if (!Microbot.isLoggedIn()) {
+            while (!Microbot.isLoggedIn()) {
+                if (!super.isRunning()) {
+                    break;
+                }
+                if (Microbot.isLoggedIn()) {
+                    break;
+                }
+                sleep(1000, 3000);
+                if (!Microbot.isLoggedIn()) {
+                    new Login(Login.getRandomWorld(true));
+                    sleepUntil(() -> Microbot.isLoggedIn(), Rs2Random.between(10000, 20000));
+                }
+            }
+            shouldFlee = false;
+            return;
+        }
+
+        if(Rs2Combat.inCombat() && Microbot.isLoggedIn()) {
             getAwayFromPker();
         }
         shouldFlee = false;
@@ -719,7 +735,7 @@ public class revKillerScript extends Script {
                     sleepUntil(()-> !Rs2Player.isAnimating(), Rs2Random.between(1000,4000));
                 }
             }
-            if(Rs2Player.getBoostedSkillLevel(Skill.PRAYER) >= rejat && Rs2Player.getRunEnergy() >= runener){
+            if(Rs2Player.getBoostedSkillLevel(Skill.PRAYER) >= rejat || Rs2Player.getRunEnergy() >= runener){
                 break;
             }
 
@@ -1267,7 +1283,7 @@ public class revKillerScript extends Script {
         playerlist.addAll(Rs2Player.getPlayersInCombatLevelRange());
         List<String> weapons = Arrays.asList(
                 "staff", "shadow", "wand", "sceptre", "ballista",
-                "crossbow", "dragon dagger", "dragon claws", "eclipse atlatl", "dark bow"
+                "crossbow", "dragon dagger", "dragon claws", "burning claws", "eclipse atlatl", "dark bow"
         );
 
         for (Rs2PlayerModel player : playerlist) {
