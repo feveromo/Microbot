@@ -830,6 +830,7 @@ public static List<WorldPoint> getWalkPath(WorldPoint target) {
             }
 
             for (WorldPoint probe : probes) {
+				if (!path.contains(probe)) continue;
                 if (!Objects.equals(probe.getPlane(), Microbot.getClient().getLocalPlayer().getWorldLocation().getPlane())) continue;
 
                 WallObject wall = Rs2GameObject.getWallObject(o -> o.getWorldLocation().equals(probe), probe, 3);
@@ -865,6 +866,7 @@ public static List<WorldPoint> getWalkPath(WorldPoint target) {
                 }
 
                 if (found) {
+					System.out.println("break");
                     if (!handleDoorException(object, action)) {
                         Rs2GameObject.interact(object, action);
                         Rs2Player.waitForWalking();
@@ -1585,6 +1587,11 @@ public static List<WorldPoint> getWalkPath(WorldPoint target) {
                     Rs2Dialogue.clickOption("Yes, teleport me now");
                 }
 
+				if (itemAction.equalsIgnoreCase("break") && transport.getDisplayInfo().toLowerCase().contains("ice plateau teleport")) {
+					Rs2Dialogue.sleepUntilHasQuestion("Teleport into the DEEP wilderness?");
+					Rs2Dialogue.clickOption("Yes");
+				}
+
                 if (itemAction.equalsIgnoreCase("teleport") && transport.getDisplayInfo().toLowerCase().contains("slayer ring")) {
                     Rs2Dialogue.sleepUntilSelectAnOption();
                     Rs2Dialogue.clickOption(destination);
@@ -1596,7 +1603,7 @@ public static List<WorldPoint> getWalkPath(WorldPoint target) {
                 }
 
                 Microbot.log("Traveling to " + transport.getDisplayInfo());
-                return sleepUntilTrue(() -> Rs2Player.getWorldLocation().distanceTo2D(transport.getDestination()) < OFFSET, 100, 5000);
+                return sleepUntilTrue(() -> Rs2Player.getWorldLocation().distanceTo2D(transport.getDestination()) < OFFSET, 100, 8000);
             }
         }
         else {
@@ -1625,7 +1632,7 @@ public static List<WorldPoint> getWalkPath(WorldPoint target) {
                     }
                 }
                 Microbot.log("Traveling to " + transport.getDisplayInfo());
-                return sleepUntilTrue(() -> Rs2Player.getWorldLocation().distanceTo2D(transport.getDestination()) < OFFSET, 100, 5000);
+                return sleepUntilTrue(() -> Rs2Player.getWorldLocation().distanceTo2D(transport.getDestination()) < OFFSET, 100, 8000);
             }
         }
         return false;
