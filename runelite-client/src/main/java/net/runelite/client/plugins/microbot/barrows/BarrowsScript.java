@@ -150,6 +150,7 @@ public class BarrowsScript extends Script {
                         }
 
                         stopFutureWalker();
+                        closeBank();
 
                         Microbot.log("Checking mound for: " + brother.getName());
 
