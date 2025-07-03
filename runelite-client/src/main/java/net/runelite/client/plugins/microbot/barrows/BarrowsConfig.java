@@ -1,8 +1,11 @@
 package net.runelite.client.plugins.microbot.barrows;
 
 import net.runelite.api.ItemID;
-import net.runelite.client.config.*;
-import net.runelite.client.plugins.microbot.revKiller.revKillerConfig;
+import net.runelite.client.config.Config;
+import net.runelite.client.config.ConfigGroup;
+import net.runelite.client.config.ConfigInformation;
+import net.runelite.client.config.ConfigItem;
+import net.runelite.client.config.Range;
 import net.runelite.client.plugins.microbot.util.misc.Rs2Food;
 
 @ConfigGroup("barrows")

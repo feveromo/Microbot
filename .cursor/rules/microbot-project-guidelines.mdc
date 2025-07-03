@@ -25,17 +25,6 @@ Microbot is an open-source Old School RuneScape client based on RuneLite. It uti
   exampleScript.run(config);
   ```
 
-## Development & Setup
-
-- **First-Time Setup**: For initial project setup as a developer, refer to the guide: [Building with IntelliJ IDEA](mdc:https:/github.com/chsami/microbot/wiki/Building-with-IntelliJ-IDEA)
-- **Jagex Accounts**: For setting up with Jagex accounts, see: [Using Jagex Accounts](mdc:https:/github.com/runelite/runelite/wiki/Using-Jagex-Accounts)
-
-## Learning & Support
-
-- **Microbot GPT**: Learn how to write scripts using the [Microbot GPT Chatbot](mdc:https:/chatgpt.com/g/g-LM0fGeeXB-microbot-documentation).
-- **Discord**: Join the [Discord community](mdc:https:/discord.gg/zaGrfqFEWE) for questions and support.
-- **README**: For more general information, refer to the main [README.md](mdc:README.md).
-
 ## Microbot Plugin Structure (`runelite-client/.../plugins/microbot`)
 
 The `runelite-client/src/main/java/net/runelite/client/plugins/microbot/` directory is central to Microbot's scripting capabilities. It houses individual plugins, each typically residing in its own subdirectory.
@@ -88,5 +77,27 @@ The `util` directory is organized into subdirectories, each focusing on a specif
 
 Files like `ActorModel.java`, `Global.java`, and `Rs2InventorySetup.java` directly within `util/` likely provide more general utility functions or foundational classes used by other utilities.
 
-By leveraging these utilities, developers can build more complex and robust scripts with less effort, focusing on the script's logic rather than the intricacies of game client interaction.
+## Extended Utility Reference
+
+A comprehensive, auto-generated reference for every `Rs2*` utility class is available in the workspace at
+[`microbot_utils_documentation.md`](mdc:microbot_utils_documentation.md).  It includes each class's purpose, key
+methods, and example usage.  Whenever you need to find *how* to perform a specific action (banking, walking,
+combat, etc.) you can open that file and search for the relevant `Rs2...` class.
+
+Below is a quick index of the main categories covered there.  Use it to locate the right helper class before
+diving into the full docs.
+
+* Core player helpers – `Rs2Player`, `Rs2Camera`, `Rs2Walker`, `Rs2Random`
+* Inventory & equipment – `Rs2Inventory`, `Rs2Equipment`, `Rs2Bank`, `Rs2DepositBox`, `Rs2RunePouch`
+* NPC & combat – `Rs2Npc`, `Rs2NpcManager`, `Rs2Combat`, `Rs2Prayer`, `Rs2Antiban`
+* Game-object interaction – `Rs2GameObject`, `Rs2GroundItem`, `Rs2MiniMap`, `Rs2Widget`
+* Magic & spells – `Rs2Magic`, `Rs2SpellBookSettings`
+* Utility / misc – `Rs2Keyboard`, `Rs2Mouse`, `Rs2Random`, `Rs2Settings`, `Rs2Discord`, `Rs2Pvp`
+
+When writing new Microbot code in Cursor:
+1. Import the utility class you need (e.g. `import static net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory.*;`).
+2. Call its static helper methods inside your script's `run()` loop or task classes.
+3. Prefer utility methods over raw RuneLite API calls; they already implement path-finding, menu interaction, and
+   anti-ban delays.
+4. If a helper method does not exist yet, add it to the appropriate `Rs2*` class so that future scripts can reuse it.
 

@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import javax.inject.Inject;
 
@@ -360,8 +361,10 @@ public class EnchantScript extends Script {
     
     private Rs2ItemModel findMatchingJewelleryItem() {
         List<JewelleryType> jewelryToProcess = getJewelleryForCurrentConfig();
+        // Convert stream to list for iteration
+        List<Rs2ItemModel> inventoryItems = Rs2Inventory.items().collect(Collectors.toList());
         
-        for (Rs2ItemModel item : Rs2Inventory.items()) {
+        for (Rs2ItemModel item : inventoryItems) {
             for (JewelleryType jewellery : jewelryToProcess) {
                 if (item.getId() == jewellery.getUnenchantedItemId()) {
                     return item;
@@ -441,7 +444,9 @@ public class EnchantScript extends Script {
      * @return true if at least one unenchanted jewellery item is found
      */
     private boolean hasJewelleryToEnchant(List<JewelleryType> jewelryList) {
-        for (Rs2ItemModel item : Rs2Inventory.items()) {
+        // Convert stream to list for iteration
+        List<Rs2ItemModel> inventoryItems = Rs2Inventory.items().collect(Collectors.toList());
+        for (Rs2ItemModel item : inventoryItems) {
             for (JewelleryType jewellery : jewelryList) {
                 if (item.getId() == jewellery.getUnenchantedItemId()) {
                     return true;

@@ -1,15 +1,16 @@
 package net.runelite.client.plugins.microbot.barrows;
 
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.Graphics2D;
+
+import javax.inject.Inject;
+
 import net.runelite.client.plugins.microbot.Microbot;
-import net.runelite.client.plugins.microbot.example.ExamplePlugin;
 import net.runelite.client.ui.overlay.OverlayPanel;
 import net.runelite.client.ui.overlay.OverlayPosition;
 import net.runelite.client.ui.overlay.components.LineComponent;
 import net.runelite.client.ui.overlay.components.TitleComponent;
-
-import javax.inject.Inject;
-import javax.inject.Named;
-import java.awt.*;
 
 public class BarrowsOverlay extends OverlayPanel {
 
