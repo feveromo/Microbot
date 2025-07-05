@@ -1,6 +1,10 @@
 - **Start botting**
     - Install Microbot
 - [**Development**](Development.md)
+    - **Documentation**
+      * [API Documentation](api-documentation.md)
+      * [Quick Reference Guide](api-quick-reference.md)
+      * [RuneLite API Reference](runelite-api-reference.md)
     - **API**
       * [Rs2Bank](api/apidocs/net/runelite/client/plugins/microbot/util/bank/Rs2Bank.html)
       * [Rs2Camera](api/apidocs/net/runelite/client/plugins/microbot/util/camera/Rs2Camera.html)
